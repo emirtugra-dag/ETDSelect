@@ -1,13 +1,24 @@
 # 📸 ETDSelect
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](https://microsoft.com/windows)
-[![C++ Standard](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B17)
-[![Language](https://img.shields.io/badge/Language-TR%20%7C%20EN-brightgreen.svg)](#-language--dil)
+<p align="center">
+  <img src="assets/logo.ico" width="128" height="128" alt="ETDSelect Logo"><br>
+  <b>Ultra-lightweight, zero-latency, tray-iconless screenshot & annotation tool for Windows</b>
+</p>
 
-**Ultra-lightweight, zero-latency, tray-iconless screenshot & annotation tool for Windows**
+<p align="center">
+  <a href="https://github.com/emirtugra-dag/ETDSelect/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://microsoft.com/windows"><img src="https://img.shields.io/badge/Platform-Windows-lightgrey.svg" alt="Platform: Windows"></a>
+  <a href="https://en.wikipedia.org/wiki/C%2B%2B17"><img src="https://img.shields.io/badge/C%2B%2B-17-blue.svg" alt="C++ Standard: 17"></a>
+  <a href="#-language--dil"><img src="https://img.shields.io/badge/Language-TR%20%7C%20EN-brightgreen.svg" alt="Language: TR | EN"></a>
+  <a href="https://github.com/emirtugra-dag/ETDSelect/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/Release-v1.0.0-orange.svg" alt="Release: v1.0.0"></a>
+</p>
 
-**ETDSelect** is a minimalist screenshot tool written in pure C++ Win32 API and GDI+ for Windows 10/11. It operates with zero visual clutter, no persistent system tray icon, ~7 MB RAM usage, and 0% background CPU footprint.
+---
+
+## 💾 Direct Downloads / Doğrudan İndirme
+
+- **⚙️ Setup / Kurulum Sihirbazı:** [Download ETDSelect_Setup.exe](releases/ETDSelect_Setup.exe) *(Recommended)*
+- **🚀 Portable / Taşınabilir Sürüm:** [Download ETDSelect.exe](releases/ETDSelect.exe) *(No installation needed)*
 
 ---
 
@@ -91,3 +102,8 @@ build.bat
 - **License:** [MIT License](LICENSE)
 
 *Disclaimer: This is a personal open-source project. The developer is under no obligation to provide ongoing updates or support. Use at your own risk.*
+
+---
+
+<sub>🤖 Bu proje **Gemini 3.6 Flash High** ve **Claude Opus 4.6** kullanılarak **Antigravity** üzerinde oluşturulmuştur.</sub><br>
+<sub>🤖 This project was created on **Antigravity** using **Gemini 3.6 Flash High** and **Claude Opus 4.6**.</sub>
