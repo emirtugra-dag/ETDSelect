@@ -64,7 +64,6 @@ bool App::Init(HINSTANCE hInstance) {
         m_settings.Save();
     } else {
         m_settings.ApplyAutostartRegistry();
-        PostMessageW(m_hwnd, WM_HOTKEY, ID_HOTKEY_CAPTURE, 0);
     }
 
     RegisterAppHotkey();
