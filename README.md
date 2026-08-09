@@ -52,7 +52,7 @@
 
 | Shortcut | Description |
 | --- | --- |
-| `Ctrl + Shift + S` / `PrtScn` | Start screenshot capture (Customizable) |
+| `Ctrl + Shift + S` | Start screenshot capture (Customizable in Settings) |
 | `Space + Drag` | Move selection rectangle |
 | `Ctrl + Z` | Undo last drawing action |
 | `Ctrl + C` | Copy PNG to clipboard and close |
@@ -87,7 +87,7 @@ build.bat
 
 | Kısayol | Açıklama |
 | --- | --- |
-| `Ctrl + Shift + S` / `PrtScn` | Ekran alıntısı başlat (Özelleştirilebilir) |
+| `Ctrl + Shift + S` | Ekran alıntısı başlat (Ayarlardan Özelleştirilebilir) |
 | `Space + Sürükle` | Seçim dikdörtgenini taşı |
 | `Ctrl + Z` | Son çizim adımını geri al |
 | `Ctrl + C` | Panoya PNG olarak kopyala ve kapat |
@@ -101,7 +101,7 @@ build.bat
 - **Developer:** Emir Tuğra Dağ
 - **License:** [MIT License](LICENSE)
 
-*Disclaimer: This is a personal open-source project. The developer is under no obligation to provide ongoing updates or support. Use at your own risk.*
+*Disclaimer: This is a personal open-source project. The developer is under no obligation to provide ongoing updates or support. Provided "AS IS" without warranty of any kind. All operations run locally on your system.*
 
 ---
 
