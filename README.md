@@ -103,6 +103,11 @@ build.bat
 
 *Disclaimer: This is a personal open-source project. The developer is under no obligation to provide ongoing updates or support. Provided "AS IS" without warranty of any kind. All operations run locally on your system.*
 
+### 🎨 Logo & Trademark Policy / Marka ve Logo Politikası
+
+- **English:** The `ETDSelect` software source code is licensed under the [MIT License](LICENSE). However, the **ETDSelect name, official logo, and visual brand identity** belong exclusively to **Emir Tuğra Dağ** and are **All Rights Reserved**. Unauthorized use, re-branding, or commercial distribution of the official logo and brand assets without prior written permission is strictly prohibited.
+- **Türkçe:** `ETDSelect` yazılımının kaynak kodları [MIT Lisansı](LICENSE) kapsamındadır. Ancak **ETDSelect ismi, resmi logosu ve görsel marka kimliği** tamamen **Emir Tuğra Dağ**'a aittir ve **Tüm Hakları Saklıdır**. Logosunun ve marka kimliğinin izinsiz kullanımı, kopyalanması veya üçüncü şahıslarca başka projelerde kullanılması kesinlikle yasaktır.
+
 ---
 
 <sub>🤖 Bu proje **Gemini 3.6 Flash High** ve **Claude Opus 4.6** kullanılarak **Antigravity** üzerinde oluşturulmuştur.</sub><br>
