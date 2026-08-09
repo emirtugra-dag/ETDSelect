@@ -17,8 +17,8 @@
 
 ## 💾 Direct Downloads / Doğrudan İndirme
 
-- **⚙️ Setup / Kurulum Sihirbazı:** [Download ETDSelect_Setup.exe](releases/ETDSelect_Setup.exe) *(Recommended)*
-- **🚀 Portable / Taşınabilir Sürüm:** [Download ETDSelect.exe](releases/ETDSelect.exe) *(No installation needed)*
+- **⚙️ Setup / Kurulum Sihirbazı:** [Download ETDSelect_Setup.exe](https://github.com/emirtugra-dag/ETDSelect/releases/download/v1.0.0/ETDSelect_Setup.exe) *(Recommended)*
+- **🚀 Portable / Taşınabilir Sürüm:** [Download ETDSelect.exe](https://github.com/emirtugra-dag/ETDSelect/releases/download/v1.0.0/ETDSelect.exe) *(No installation needed)*
 
 ---
 
