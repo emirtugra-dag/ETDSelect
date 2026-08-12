@@ -13,6 +13,11 @@
   <a href="https://github.com/emirtugra-dag/ETDSelect/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/Release-v1.0.0-orange.svg" alt="Release: v1.0.0"></a>
 </p>
 
+<p align="center">
+  <img src="assets/preview1.png" width="400" alt="ETDSelect Screenshot Canvas">
+  <img src="assets/preview2.png" width="400" alt="ETDSelect Toolbar & Editor">
+</p>
+
 ---
 
 ## 💾 Direct Downloads / Doğrudan İndirme
