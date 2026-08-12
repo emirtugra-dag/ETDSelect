@@ -127,6 +127,7 @@ LRESULT CALLBACK InlineEditProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         POINT pos = { rc.left, rc.top };
         ScreenToClient(GetParent(hWnd), &pos);
         SetWindowPos(hWnd, NULL, pos.x, pos.y, maxLineW, newH, SWP_NOZORDER);
+        InvalidateRect(GetParent(hWnd), NULL, FALSE);
         return result;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
