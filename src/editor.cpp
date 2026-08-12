@@ -53,20 +53,81 @@ RECT Editor::s_colorPickerRect = {0, 0, 0, 0};
 bool Editor::s_registered = false;
 
 static HWND s_editHwnd = NULL;
+static HBRUSH s_editBgBrush = NULL;
+static HFONT s_editFont = NULL;
+
+static void CommitTextEdit(HWND parentHwnd) {
+    if (!s_editHwnd) return;
+    int len = GetWindowTextLengthW(s_editHwnd);
+    if (len > 0) {
+        std::vector<wchar_t> buf(len + 1, 0);
+        GetWindowTextW(s_editHwnd, buf.data(), len + 1);
+        g_editorActiveAction.text = buf.data();
+        g_editorIsDrawing = false;
+        Editor::s_actions.push_back(g_editorActiveAction);
+    } else {
+        g_editorIsDrawing = false;
+    }
+    DestroyWindow(s_editHwnd);
+    s_editHwnd = NULL;
+    if (s_editFont) { DeleteObject(s_editFont); s_editFont = NULL; }
+    if (s_editBgBrush) { DeleteObject(s_editBgBrush); s_editBgBrush = NULL; }
+    InvalidateRect(parentHwnd, NULL, FALSE);
+}
+
+static void CancelTextEdit(HWND parentHwnd) {
+    if (!s_editHwnd) return;
+    g_editorIsDrawing = false;
+    DestroyWindow(s_editHwnd);
+    s_editHwnd = NULL;
+    if (s_editFont) { DeleteObject(s_editFont); s_editFont = NULL; }
+    if (s_editBgBrush) { DeleteObject(s_editBgBrush); s_editBgBrush = NULL; }
+    InvalidateRect(parentHwnd, NULL, FALSE);
+}
 
 LRESULT CALLBACK InlineEditProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    if (uMsg == WM_KEYDOWN && wParam == VK_RETURN) {
-        wchar_t buf[256] = {0};
-        GetWindowTextW(hWnd, buf, 256);
-        g_editorActiveAction.text = buf;
-        g_editorIsDrawing = false;
-        PostMessageW(GetParent(hWnd), WM_APP + 10, 0, 0);
+    if (uMsg == WM_KEYDOWN && wParam == VK_ESCAPE) {
+        CancelTextEdit(GetParent(hWnd));
         return 0;
     }
-    if (uMsg == WM_KEYDOWN && wParam == VK_ESCAPE) {
-        g_editorIsDrawing = false;
-        PostMessageW(GetParent(hWnd), WM_APP + 11, 0, 0);
-        return 0;
+    if (uMsg == WM_CHAR || uMsg == WM_KEYDOWN) {
+        // After typing, auto-resize the edit control to fit content
+        LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        // Auto-resize height based on line count
+        int lineCount = (int)SendMessageW(hWnd, EM_GETLINECOUNT, 0, 0);
+        if (lineCount < 1) lineCount = 1;
+        HDC hdc = GetDC(hWnd);
+        HFONT hOldFont = (HFONT)SelectObject(hdc, s_editFont);
+        TEXTMETRICW tm;
+        GetTextMetricsW(hdc, &tm);
+        int lineH = tm.tmHeight + tm.tmExternalLeading;
+        SelectObject(hdc, hOldFont);
+        ReleaseDC(hWnd, hdc);
+        int newH = lineCount * lineH + 8;
+        // Also auto-resize width based on longest line
+        int maxLineW = 150;
+        for (int i = 0; i < lineCount; i++) {
+            int lineLen = (int)SendMessageW(hWnd, EM_LINELENGTH, SendMessageW(hWnd, EM_LINEINDEX, i, 0), 0);
+            if (lineLen > 0) {
+                std::vector<wchar_t> lineBuf(lineLen + 2, 0);
+                *(WORD*)lineBuf.data() = (WORD)(lineLen + 1);
+                SendMessageW(hWnd, EM_GETLINE, i, (LPARAM)lineBuf.data());
+                lineBuf[lineLen] = 0;
+                HDC hdc2 = GetDC(hWnd);
+                HFONT hOldFont2 = (HFONT)SelectObject(hdc2, s_editFont);
+                SIZE sz;
+                GetTextExtentPoint32W(hdc2, lineBuf.data(), lineLen, &sz);
+                SelectObject(hdc2, hOldFont2);
+                ReleaseDC(hWnd, hdc2);
+                if (sz.cx + 16 > maxLineW) maxLineW = sz.cx + 16;
+            }
+        }
+        RECT rc;
+        GetWindowRect(hWnd, &rc);
+        POINT pos = { rc.left, rc.top };
+        ScreenToClient(GetParent(hWnd), &pos);
+        SetWindowPos(hWnd, NULL, pos.x, pos.y, maxLineW, newH, SWP_NOZORDER);
+        return result;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
@@ -158,6 +219,8 @@ void Editor::Shutdown() {
         DestroyWindow(s_editHwnd);
         s_editHwnd = NULL;
     }
+    if (s_editFont) { DeleteObject(s_editFont); s_editFont = NULL; }
+    if (s_editBgBrush) { DeleteObject(s_editBgBrush); s_editBgBrush = NULL; }
     if (s_hwnd) {
         HWND localHwnd = s_hwnd;
         s_hwnd = NULL;
@@ -335,7 +398,16 @@ LRESULT CALLBACK Editor::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             int y = GET_Y_LPARAM(lParam);
 
             if (s_editHwnd) {
-                PostMessageW(hwnd, WM_APP + 11, 0, 0);
+                // Check if click is outside the edit control
+                RECT editRect;
+                GetWindowRect(s_editHwnd, &editRect);
+                POINT editPt = { x, y };
+                ClientToScreen(hwnd, &editPt);
+                if (!PtInRect(&editRect, editPt)) {
+                    CommitTextEdit(hwnd);
+                    return 0;
+                }
+                break; // Let click pass to edit control
             }
 
             POINT pt = { x, y };
@@ -519,21 +591,25 @@ LRESULT CALLBACK Editor::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         }
 
         case WM_APP + 10:
-            if (s_editHwnd) {
-                s_actions.push_back(s_activeAction);
-                DestroyWindow(s_editHwnd);
-                s_editHwnd = NULL;
-                InvalidateRect(hwnd, NULL, FALSE);
-            }
+            CommitTextEdit(hwnd);
             return 0;
 
         case WM_APP + 11:
-            if (s_editHwnd) {
-                DestroyWindow(s_editHwnd);
-                s_editHwnd = NULL;
-                InvalidateRect(hwnd, NULL, FALSE);
-            }
+            CancelTextEdit(hwnd);
             return 0;
+
+        case WM_CTLCOLOREDIT: {
+            if ((HWND)lParam == s_editHwnd) {
+                HDC hdcEdit = (HDC)wParam;
+                SetTextColor(hdcEdit, s_currentColor);
+                SetBkMode(hdcEdit, TRANSPARENT);
+                if (!s_editBgBrush) {
+                    s_editBgBrush = CreateSolidBrush(RGB(255, 255, 255));
+                }
+                return (LRESULT)s_editBgBrush;
+            }
+            break;
+        }
 
         case WM_DESTROY:
             if (s_baseBitmap) {
@@ -1277,16 +1353,32 @@ void Editor::OnMouseDown(int x, int y) {
     if (s_currentTool == ToolType::TOOL_TEXT) {
         s_activeAction.textPos = { x, y };
         
-        if (s_editHwnd) DestroyWindow(s_editHwnd);
+        if (s_editHwnd) {
+            CommitTextEdit(s_hwnd);
+        }
+        
+        // Calculate font size matching the render output
+        int fontSize = s_currentThickness * 4 + 10;
+        
+        if (s_editFont) { DeleteObject(s_editFont); s_editFont = NULL; }
+        s_editFont = CreateFontW(
+            fontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Arial"
+        );
+        
+        if (s_editBgBrush) { DeleteObject(s_editBgBrush); s_editBgBrush = NULL; }
+        s_editBgBrush = CreateSolidBrush(RGB(255, 255, 255));
         
         HINSTANCE hInst = GetModuleHandle(NULL);
         s_editHwnd = CreateWindowExW(
-            0, L"EDIT", L"",
-            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-            x, y, 150, 30,
+            WS_EX_CLIENTEDGE, L"EDIT", L"",
+            WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN,
+            x, y, 200, fontSize + 8,
             s_hwnd, NULL, hInst, NULL
         );
         
+        SendMessageW(s_editHwnd, WM_SETFONT, (WPARAM)s_editFont, TRUE);
         SetWindowSubclass(s_editHwnd, InlineEditProc, 1, 0);
         SetFocus(s_editHwnd);
     }
