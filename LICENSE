@@ -1,4 +1,10 @@
-MIT License
+ETDSelect LICENSE
+
+This project is licensed under a combined license separating the Software Source Code from the Brand, Logo, and Trademark assets.
+
+--------------------------------------------------------------------------------
+1. SOFTWARE SOURCE CODE LICENSE (MIT License)
+--------------------------------------------------------------------------------
 
 Copyright (c) 2026 Emir Tuğra Dağ
 
@@ -20,4 +26,20 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Note: The MIT License applies to the source code and documentation. The project name "ETDSelect" and its official logo/branding are explicitly excluded from this license and remain all rights reserved.
+--------------------------------------------------------------------------------
+2. BRAND, LOGO, AND TRADEMARK POLICY (All Rights Reserved / Tüm Hakları Saklıdır)
+--------------------------------------------------------------------------------
+
+[EN]
+The permission granted under Section 1 (Software Source Code License) applies ONLY to the source code of the Software. 
+
+It does NOT grant any rights, implied or otherwise, to use the product name "ETDSelect", the application logo/icon (including assets/logo.ico, assets/preview1.png, assets/preview2.png, or any GDI+ icon shapes), or the visual branding and identity of the project.
+
+The name "ETDSelect", the official logo/icon, and all visual branding assets are the exclusive intellectual property of Emir Tuğra Dağ and are protected under trademark and unfair competition laws. All Rights Reserved. You may not copy, modify, distribute, or use the logo, name, or branding assets in any derivative work or separate application without express prior written permission from Emir Tuğra Dağ.
+
+[TR]
+Bölüm 1 (Yazılım Kaynak Kod Lisansı) kapsamında verilen izinler YALNIZCA yazılımın kaynak kodları için geçerlidir.
+
+Bu lisans, "ETDSelect" ürün ismini, uygulama logosunu/ikonunu (assets/logo.ico, assets/preview1.png, assets/preview2.png ve diğer tüm görsel tasarım ögeleri dahil) veya projenin görsel marka kimliğini kullanma hakkı VERMEZ.
+
+"ETDSelect" ismi, resmi logo/ikon ve tüm görsel marka ögeleri tamamen Emir Tuğra Dağ'ın mülkiyetindedir ve telif hakkı ile haksız rekabet kanunları kapsamında korunmaktadır. Tüm Hakları Saklıdır. Emir Tuğra Dağ'ın önceden verilmiş yazılı izni olmaksızın logonun, ismin veya marka ögelerinin kopyalanması, değiştirilmesi, dağıtılması veya başka bir yazılımda/türetilmiş çalışmada kullanılması kesinlikle yasaktır.
