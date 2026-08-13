@@ -19,6 +19,11 @@ using std::max;
 
 HWND Editor::s_hwnd = NULL;
 HBITMAP Editor::s_baseBitmap = NULL;
+Gdiplus::Bitmap* Editor::s_gdiplusBaseBmp = NULL;
+Gdiplus::Bitmap* Editor::s_canvasBmp = NULL;
+HDC Editor::s_backBufferDC = NULL;
+HBITMAP Editor::s_backBufferBmp = NULL;
+HGDIOBJ Editor::s_oldBackBufferObj = NULL;
 RECT Editor::s_selectionRect = {0, 0, 0, 0};
 int Editor::s_screenW = 0;
 int Editor::s_screenH = 0;
@@ -181,8 +186,19 @@ void Editor::Start(RECT selection, HBITMAP screenCapture) {
         DeleteObject(screenCapture);
     }
 
+    // Pre-allocate persistent GDI+ base image and canvas bitmaps
+    s_gdiplusBaseBmp = new Gdiplus::Bitmap(s_baseBitmap, NULL);
+    s_canvasBmp = new Gdiplus::Bitmap(s_screenW, s_screenH, PixelFormat32bppARGB);
+
+    // Pre-allocate persistent double-buffering GDI resources
+    HDC hdcScr = GetDC(NULL);
+    s_backBufferDC = CreateCompatibleDC(hdcScr);
+    s_backBufferBmp = CreateCompatibleBitmap(hdcScr, s_screenW, s_screenH);
+    s_oldBackBufferObj = SelectObject(s_backBufferDC, s_backBufferBmp);
+    ReleaseDC(NULL, hdcScr);
+
     s_actions.clear();
-    s_currentTool = ToolType::TOOL_DRAW;
+    s_currentTool = ToolType::TOOL_MOVE;
     s_currentColor = RGB(255, 0, 0);
     s_currentThickness = 3;
     s_isDrawing = false;
@@ -231,6 +247,27 @@ void Editor::Shutdown() {
         DeleteObject(s_baseBitmap);
         s_baseBitmap = NULL;
     }
+    
+    // Clean up persistent GDI+ bitmaps
+    if (s_gdiplusBaseBmp) {
+        delete s_gdiplusBaseBmp;
+        s_gdiplusBaseBmp = NULL;
+    }
+    if (s_canvasBmp) {
+        delete s_canvasBmp;
+        s_canvasBmp = NULL;
+    }
+
+    // Clean up persistent double buffer GDI resources
+    if (s_backBufferDC) {
+        SelectObject(s_backBufferDC, s_oldBackBufferObj);
+        DeleteObject(s_backBufferBmp);
+        DeleteDC(s_backBufferDC);
+        s_backBufferDC = NULL;
+        s_backBufferBmp = NULL;
+        s_oldBackBufferObj = NULL;
+    }
+
     s_isDrawing = false;
     s_colorPickerVisible = false;
     s_isResizing = false;
@@ -318,17 +355,17 @@ bool Editor::ShouldMoveSelection(int x, int y) {
 }
 
 LRESULT CALLBACK Editor::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    static bool s_isRedrawingSelection = false;
+    static POINT s_redrawStartPt = {0, 0};
+    static RECT s_redrawStartRect = {0, 0, 0, 0};
+
     switch (uMsg) {
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
 
-            HDC hdcMem = CreateCompatibleDC(hdc);
-            HBITMAP hbmMem = CreateCompatibleBitmap(hdc, s_screenW, s_screenH);
-            HGDIOBJ hOld = SelectObject(hdcMem, hbmMem);
-
-            {
-                Graphics g(hdcMem);
+            if (s_backBufferDC) {
+                Graphics g(s_backBufferDC);
                 
                 g.SetSmoothingMode(SmoothingModeAntiAlias);
                 g.SetCompositingQuality(CompositingQualityHighSpeed);
@@ -342,11 +379,7 @@ LRESULT CALLBACK Editor::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
                 }
             }
 
-            BitBlt(hdc, 0, 0, s_screenW, s_screenH, hdcMem, 0, 0, SRCCOPY);
-
-            SelectObject(hdcMem, hOld);
-            DeleteObject(hbmMem);
-            DeleteDC(hdcMem);
+            BitBlt(hdc, 0, 0, s_screenW, s_screenH, s_backBufferDC, 0, 0, SRCCOPY);
 
             EndPaint(hwnd, &ps);
             return 0;
@@ -448,6 +481,16 @@ LRESULT CALLBACK Editor::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
                 return 0;
             }
 
+            // If TOOL_MOVE is active, clicking outside the selection starts redrawing
+            if (s_currentTool == ToolType::TOOL_MOVE) {
+                s_isRedrawingSelection = true;
+                s_redrawStartPt = pt;
+                s_redrawStartRect = s_selectionRect;
+                s_selectionRect = { pt.x, pt.y, pt.x, pt.y };
+                SetCapture(hwnd);
+                return 0;
+            }
+
             OnMouseDown(x, y);
             return 0;
         }
@@ -456,6 +499,17 @@ LRESULT CALLBACK Editor::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             int x = GET_X_LPARAM(lParam);
             int y = GET_Y_LPARAM(lParam);
             s_mousePt = { x, y };
+
+            if (s_isRedrawingSelection) {
+                int cx = max(0, min(x, s_screenW));
+                int cy = max(0, min(y, s_screenH));
+                s_selectionRect.left = min((int)s_redrawStartPt.x, cx);
+                s_selectionRect.top = min((int)s_redrawStartPt.y, cy);
+                s_selectionRect.right = max((int)s_redrawStartPt.x, cx);
+                s_selectionRect.bottom = max((int)s_redrawStartPt.y, cy);
+                InvalidateRect(hwnd, NULL, FALSE);
+                return 0;
+            }
 
             if (s_isMovingSelection) {
                 int dx = x - s_moveStartPt.x;
@@ -513,6 +567,18 @@ LRESULT CALLBACK Editor::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         case WM_LBUTTONUP: {
             int x = GET_X_LPARAM(lParam);
             int y = GET_Y_LPARAM(lParam);
+
+            if (s_isRedrawingSelection) {
+                s_isRedrawingSelection = false;
+                ReleaseCapture();
+                int w = abs((int)(s_selectionRect.right - s_selectionRect.left));
+                int h = abs((int)(s_selectionRect.bottom - s_selectionRect.top));
+                if (w < 20 || h < 20) {
+                    s_selectionRect = s_redrawStartRect;
+                }
+                InvalidateRect(hwnd, NULL, FALSE);
+                return 0;
+            }
 
             if (s_isMovingSelection) {
                 s_isMovingSelection = false;
@@ -623,12 +689,29 @@ LRESULT CALLBACK Editor::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
 }
 
 void Editor::RenderCanvas(Graphics& g, int screenW, int screenH) {
-    if (!s_baseBitmap) return;
+    if (!s_gdiplusBaseBmp || !s_canvasBmp) return;
 
-    Bitmap baseImage(s_baseBitmap, NULL);
+    // Draw base screenshot onto the temporary canvas
+    {
+        Graphics tempG(s_canvasBmp);
+        tempG.SetSmoothingMode(SmoothingModeAntiAlias);
+        tempG.SetCompositingQuality(CompositingQualityHighSpeed);
+        tempG.DrawImage(s_gdiplusBaseBmp, 0, 0, screenW, screenH);
 
-    g.DrawImage(&baseImage, 0, 0, screenW, screenH);
+        // Render actions sequentially on this canvas so they stack and affect each other
+        for (const auto& action : s_actions) {
+            RenderAction(tempG, action);
+        }
 
+        if (s_isDrawing) {
+            RenderAction(tempG, s_activeAction);
+        }
+    }
+
+    // Draw the composed canvas to the screen double buffer
+    g.DrawImage(s_canvasBmp, 0, 0, screenW, screenH);
+
+    // 2. Apply dark overlay to region outside selection
     Region fullRegion(Rect(0, 0, screenW, screenH));
 
     int selLeft = min((int)s_selectionRect.left, (int)s_selectionRect.right);
@@ -642,6 +725,7 @@ void Editor::RenderCanvas(Graphics& g, int screenW, int screenH) {
     SolidBrush darkOverlayBrush(Color(120, 0, 0, 0));
     g.FillRegion(&darkOverlayBrush, &fullRegion);
 
+    // 3. Draw the border, handles, and size label on top of everything
     Pen borderPen(Color(255, 0, 255, 255), 2.0f);
     g.DrawRectangle(&borderPen, selLeft, selTop, selW, selH);
 
@@ -672,14 +756,6 @@ void Editor::RenderCanvas(Graphics& g, int screenW, int screenH) {
     g.MeasureString(buf, -1, &font, PointF((REAL)selLeft, textY), &measureRect);
     g.FillRectangle(&bgBrush, measureRect);
     g.DrawString(buf, -1, &font, PointF((REAL)selLeft + 2, textY + 2), &textBrush);
-
-    for (const auto& action : s_actions) {
-        RenderAction(g, action);
-    }
-
-    if (s_isDrawing) {
-        RenderAction(g, s_activeAction);
-    }
 }
 
 void Editor::RenderAction(Graphics& g, const DrawAction& action) {
@@ -740,41 +816,55 @@ void Editor::RenderAction(Graphics& g, const DrawAction& action) {
             break;
         }
         case ToolType::TOOL_MOSAIC: {
-            if (s_baseBitmap) {
+            if (s_canvasBmp) {
                 int x = min((int)action.startPt.x, (int)action.endPt.x);
                 int y = min((int)action.startPt.y, (int)action.endPt.y);
                 int w = abs((int)(action.startPt.x - action.endPt.x));
                 int h = abs((int)(action.startPt.y - action.endPt.y));
                 if (w > 0 && h > 0) {
-                    Bitmap baseImage(s_baseBitmap, NULL);
-                    int blockSize = max(8, (int)action.mosaicBlockSize);
+                    Rect rect(x, y, w, h);
+                    BitmapData bmpData;
+                    if (s_canvasBmp->LockBits(&rect, ImageLockModeRead | ImageLockModeWrite, PixelFormat32bppARGB, &bmpData) == Ok) {
+                        int blockSize = max(8, (int)action.mosaicBlockSize);
+                        DWORD* pPixels = (DWORD*)bmpData.Scan0;
+                        int stride = bmpData.Stride / 4;
 
-                    for (int by = y; by < y + h; by += blockSize) {
-                        for (int bx = x; bx < x + w; bx += blockSize) {
-                            int bw = min(blockSize, x + w - bx);
-                            int bh = min(blockSize, y + h - by);
+                        for (int by = 0; by < h; by += blockSize) {
+                            for (int bx = 0; bx < w; bx += blockSize) {
+                                int bw = min(blockSize, w - bx);
+                                int bh = min(blockSize, h - by);
 
-                            int sampleXs[] = { bx + bw/4, bx + bw*3/4, bx + bw/2, bx + bw/4, bx + bw*3/4 };
-                            int sampleYs[] = { by + bh/4, by + bh/4, by + bh/2, by + bh*3/4, by + bh*3/4 };
-                            int r = 0, gv = 0, b = 0, count = 0;
+                                int sampleOffsetsX[] = { bw/4, bw*3/4, bw/2, bw/4, bw*3/4 };
+                                int sampleOffsetsY[] = { bh/4, bh/4, bh/2, bh*3/4, bh*3/4 };
+                                int r = 0, gv = 0, b = 0, count = 0;
 
-                            for (int i = 0; i < 5; i++) {
-                                if (sampleXs[i] >= 0 && sampleXs[i] < s_screenW && sampleYs[i] >= 0 && sampleYs[i] < s_screenH) {
-                                    Color c;
-                                    baseImage.GetPixel(sampleXs[i], sampleYs[i], &c);
-                                    r += c.GetR();
-                                    gv += c.GetG();
-                                    b += c.GetB();
-                                    count++;
+                                for (int i = 0; i < 5; i++) {
+                                    int lx = bx + sampleOffsetsX[i];
+                                    int ly = by + sampleOffsetsY[i];
+                                    if (lx >= 0 && lx < w && ly >= 0 && ly < h) {
+                                        DWORD pixel = pPixels[ly * stride + lx];
+                                        r += (pixel >> 16) & 0xFF;
+                                        gv += (pixel >> 8) & 0xFF;
+                                        b += pixel & 0xFF;
+                                        count++;
+                                    }
+                                }
+
+                                DWORD colorVal = 0xFF000000;
+                                if (count > 0) {
+                                    r /= count; gv /= count; b /= count;
+                                    colorVal = 0xFF000000 | (r << 16) | (gv << 8) | b;
+                                }
+
+                                for (int yy = 0; yy < bh; yy++) {
+                                    DWORD* pRow = pPixels + (by + yy) * stride + bx;
+                                    for (int xx = 0; xx < bw; xx++) {
+                                        pRow[xx] = colorVal;
+                                    }
                                 }
                             }
-
-                            if (count > 0) {
-                                r /= count; gv /= count; b /= count;
-                                SolidBrush mBrush(Color(255, r, gv, b));
-                                g.FillRectangle(&mBrush, bx, by, bw, bh);
-                            }
                         }
+                        s_canvasBmp->UnlockBits(&bmpData);
                     }
 
                     if (s_isDrawing && &action == &s_activeAction) {

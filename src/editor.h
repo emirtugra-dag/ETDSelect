@@ -84,6 +84,11 @@ private:
     // State
     static HWND s_hwnd;
     static HBITMAP s_baseBitmap;
+    static Gdiplus::Bitmap* s_gdiplusBaseBmp;
+    static Gdiplus::Bitmap* s_canvasBmp;
+    static HDC s_backBufferDC;
+    static HBITMAP s_backBufferBmp;
+    static HGDIOBJ s_oldBackBufferObj;
     static RECT s_selectionRect;
     static int s_screenW, s_screenH;
     static int s_originX, s_originY;
