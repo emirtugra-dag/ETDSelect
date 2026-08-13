@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/emirtugra-dag/ETDSelect/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Custom-blue.svg" alt="License: Custom"></a>
+  <a href="https://github.com/emirtugra-dag/ETDSelect/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://microsoft.com/windows"><img src="https://img.shields.io/badge/Platform-Windows-lightgrey.svg" alt="Platform: Windows"></a>
   <a href="https://en.wikipedia.org/wiki/C%2B%2B17"><img src="https://img.shields.io/badge/C%2B%2B-17-blue.svg" alt="C++ Standard: 17"></a>
   <a href="#-language--dil"><img src="https://img.shields.io/badge/Language-TR%20%7C%20EN-brightgreen.svg" alt="Language: TR | EN"></a>
@@ -101,17 +101,14 @@ build.bat
 
 ---
 
-## 👤 Developer & License
+## 👤 Developer, License & Disclaimer / Geliştirici, Lisans ve Sorumluluk Reddi
 
-- **Developer:** Emir Tuğra Dağ
-- **License:** [Custom License](LICENSE) (Code: MIT | Brand & Logo: All Rights Reserved)
+This project is licensed under a combined license separating the Software Source Code from the Brand, Logo, and Trademark assets. See **[LICENSE](LICENSE)** for details.
 
-*Disclaimer: This is a personal open-source project. The developer is under no obligation to provide ongoing updates or support. Provided "AS IS" without warranty of any kind. All operations run locally on your system.*
-
-### 🎨 Logo & Trademark Policy / Marka ve Logo Politikası
-
-- **English:** The `ETDSelect` software source code is licensed under the MIT License section of the [Custom License](LICENSE). However, the **ETDSelect name, official logo, and visual brand identity** belong exclusively to **Emir Tuğra Dağ** and are **All Rights Reserved**. Unauthorized use, re-branding, or commercial distribution of the official logo and brand assets without prior written permission is strictly prohibited.
-- **Türkçe:** `ETDSelect` yazılımının kaynak kodları [Özel Lisansın](LICENSE) 1. Bölümündeki MIT Lisansı kapsamındadır. Ancak **ETDSelect ismi, resmi logosu ve görsel marka kimliği** tamamen **Emir Tuğra Dağ**'a aittir ve **Tüm Hakları Saklıdır**. Logosunun ve marka kimliğinin izinsiz kullanımı, kopyalanması veya üçüncü şahıslarca başka projelerde kullanılması kesinlikle yasaktır.
+- **Developer:** Emir Tuğra Dağ (Independent Developer / Bağımsız Geliştirici)
+- **Source Code License:** [MIT License](LICENSE) — The underlying source code is open-source.
+- **Brand & Logo Restrictions:** The product name **"ETDSelect"**, official icons, logos (`assets/logo.ico`), preview graphics, and visual branding assets are the personal intellectual property of **Emir Tuğra Dağ** (**All Rights Reserved / Tüm Hakları Saklıdır**). Unauthorized use, re-branding, or distribution of brand assets in derivative works without written consent is strictly prohibited.
+- **Absolute Disclaimer of Liability (AS IS):** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. THE DEVELOPER (EMİR TUĞRA DAĞ) ASSUMES ZERO LIABILITY FOR ANY DAMAGES, DATA LOSS, OR SYSTEM INSTABILITY ARISING FROM THE USE OF THIS SOFTWARE. ALL RISKS BELONG ENTIRELY TO THE USER.
 
 ---
 

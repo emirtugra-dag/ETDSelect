@@ -1,12 +1,12 @@
-ETDSelect LICENSE
+ETDSelect LICENSE & TERMS OF USE
+
+Copyright (c) 2026 Emir Tuğra Dağ
 
 This project is licensed under a combined license separating the Software Source Code from the Brand, Logo, and Trademark assets.
 
 --------------------------------------------------------------------------------
 1. SOFTWARE SOURCE CODE LICENSE (MIT License)
 --------------------------------------------------------------------------------
-
-Copyright (c) 2026 Emir Tuğra Dağ
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -43,3 +43,13 @@ Bölüm 1 (Yazılım Kaynak Kod Lisansı) kapsamında verilen izinler YALNIZCA y
 Bu lisans, "ETDSelect" ürün ismini, uygulama logosunu/ikonunu (assets/logo.ico, assets/preview1.png, assets/preview2.png ve diğer tüm görsel tasarım ögeleri dahil) veya projenin görsel marka kimliğini kullanma hakkı VERMEZ.
 
 "ETDSelect" ismi, resmi logo/ikon ve tüm görsel marka ögeleri tamamen Emir Tuğra Dağ'ın mülkiyetindedir ve telif hakkı ile haksız rekabet kanunları kapsamında korunmaktadır. Tüm Hakları Saklıdır. Emir Tuğra Dağ'ın önceden verilmiş yazılı izni olmaksızın logonun, ismin veya marka ögelerinin kopyalanması, değiştirilmesi, dağıtılması veya başka bir yazılımda/türetilmiş çalışmada kullanılması kesinlikle yasaktır.
+
+--------------------------------------------------------------------------------
+3. ABSOLUTE DISCLAIMER OF LIABILITY (EKSİKSİZ SORUMLULUK REDDİ)
+--------------------------------------------------------------------------------
+
+[EN]
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR (EMİR TUĞRA DAĞ) "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, DATA LOSS, SYSTEM INSTABILITY, HARDWARE DAMAGE, OR BUSINESS INTERRUPTION) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE. ALL RISKS BELONG ENTIRELY TO THE USER.
+
+[TR]
+BU YAZILIM GELİŞTİRİCİ (EMİR TUĞRA DAĞ) TARAFINDAN "OLDUĞU GİBİ" (AS IS) SUNULMAKTADIR. YAZILIMIN KULLANIMINDAN VEYA KULLANILAMAMASINDAN, SİSTEM AKSAKLIKLARINDAN, VERİ KAYIPLARINDAN VEYA OLUŞABİLECEK HERHANGİ BİR DOĞRUDAN/DOLAYLI ZARARDAN GELİŞTİRİCİ (EMİR TUĞRA DAĞ) HİÇBİR KOŞULDA YASAL VEYA HUKUKİ OLARAK SORUMLU TUTULAMAZ. TÜM KULLANIM VE RİSK TAMAMEN KULLANICIYA AİTTİR. GELİŞTİRİCİNİN YAZILIMA GÜNCELLEME VEYA TEKNİK DESTEK SAĞLAMA ZORUNLULUĞU YOKTUR.
