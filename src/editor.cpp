@@ -1202,20 +1202,25 @@ Bitmap* Editor::CompositeFinalImage() {
     int selW = abs((int)(s_selectionRect.right - s_selectionRect.left));
     int selH = abs((int)(s_selectionRect.bottom - s_selectionRect.top));
 
-    if (selW <= 0 || selH <= 0 || !s_baseBitmap) return NULL;
+    if (selW <= 0 || selH <= 0 || !s_canvasBmp || !s_gdiplusBaseBmp) return NULL;
+
+    // Force refresh s_canvasBmp to ensure it is 100% up-to-date with all actions
+    {
+        Graphics tempG(s_canvasBmp);
+        tempG.SetSmoothingMode(SmoothingModeAntiAlias);
+        tempG.SetCompositingQuality(CompositingQualityHighSpeed);
+        tempG.DrawImage(s_gdiplusBaseBmp, 0, 0, s_screenW, s_screenH);
+        for (const auto& action : s_actions) {
+            RenderAction(tempG, action);
+        }
+        if (s_isDrawing) {
+            RenderAction(tempG, s_activeAction);
+        }
+    }
 
     Bitmap* result = new Bitmap(selW, selH, PixelFormat32bppARGB);
     Graphics g(result);
-    g.SetSmoothingMode(SmoothingModeAntiAlias);
-
-    Bitmap baseImage(s_baseBitmap, NULL);
-    g.DrawImage(&baseImage, Rect(0, 0, selW, selH), selLeft, selTop, selW, selH, UnitPixel);
-
-    g.TranslateTransform((REAL)(-selLeft), (REAL)(-selTop));
-
-    for (const auto& action : s_actions) {
-        RenderAction(g, action);
-    }
+    g.DrawImage(s_canvasBmp, Rect(0, 0, selW, selH), selLeft, selTop, selW, selH, UnitPixel);
 
     return result;
 }
