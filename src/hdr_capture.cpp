@@ -60,7 +60,7 @@ static inline uint8_t LinearToSrgbByte(float x) {
     if (x >= 1.0f) return 255;
     float s = (x <= 0.0031308f) ? (12.92f * x) : (1.055f * powf(x, 1.0f / 2.4f) - 0.055f);
     int v = (int)(s * 255.0f + 0.5f);
-    return (uint8_t)(v < 0 ? 0 : (v > 255 ? 255 : v));
+    return (uint8_t)std::clamp(v, 0, 255);
 }
 
 // Tone mapping to prevent HDR overexposure / "parlama" (washed out highlights).
@@ -185,7 +185,7 @@ static bool CaptureOutputDXGI(
     DXGI_OUTDUPL_FRAME_INFO frameInfo = {};
     IDXGIResource* desktopResource = nullptr;
 
-    // Retry loop to handle static desktop without new presentations
+    // Try up to 3 times to get a frame (handles static desktop where nothing moved)
     for (int retry = 0; retry < 3; ++retry) {
         hr = dupl->AcquireNextFrame(80, &frameInfo, &desktopResource);
         if (hr == S_OK) {
@@ -288,7 +288,56 @@ static bool CaptureOutputDXGI(
 
     d3dContext->Unmap(stagingTexture, 0);
     stagingTexture->Release();
-    return true;
+
+    // SAFETY CHECK: Verify that the frame is not pure black
+    // (e.g. GPU mismatch or black frame bug on some hybrid laptops)
+    bool hasContent = false;
+    for (size_t i = 0; i < outPixels.size(); i += 80) {
+        if ((outPixels[i] & 0x00FFFFFF) != 0) {
+            hasContent = true;
+            break;
+        }
+    }
+
+    return hasContent;
+}
+
+// Anti-overexposure filter applied to BitBlt captures of HDR monitors
+// when DXGI Desktop Duplication is unavailable or fails.
+// Restores contrast and softens blown-out whites.
+static void ApplyHdrDeoverexposureFilter(std::vector<DWORD>& pixels, int width, int height, RECT monitorRect, int originX, int originY, float sdrMultiplier) {
+    int startX = std::max(0, (int)(monitorRect.left - originX));
+    int startY = std::max(0, (int)(monitorRect.top - originY));
+    int endX = std::min(width, (int)(monitorRect.right - originX));
+    int endY = std::min(height, (int)(monitorRect.bottom - originY));
+
+    float gamma = 1.0f + 0.15f * (std::min)(sdrMultiplier - 1.0f, 2.5f);
+
+    for (int y = startY; y < endY; ++y) {
+        DWORD* row = pixels.data() + y * width;
+        for (int x = startX; x < endX; ++x) {
+            DWORD p = row[x];
+            float r = ((p >> 16) & 0xFF) / 255.0f;
+            float g = ((p >> 8) & 0xFF) / 255.0f;
+            float b = (p & 0xFF) / 255.0f;
+
+            r = powf(r, gamma);
+            g = powf(g, gamma);
+            b = powf(b, gamma);
+
+            float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+            float satBoost = 1.04f;
+            r = lum + (r - lum) * satBoost;
+            g = lum + (g - lum) * satBoost;
+            b = lum + (b - lum) * satBoost;
+
+            int outR = std::clamp((int)(r * 255.0f + 0.5f), 0, 255);
+            int outG = std::clamp((int)(g * 255.0f + 0.5f), 0, 255);
+            int outB = std::clamp((int)(b * 255.0f + 0.5f), 0, 255);
+
+            row[x] = 0xFF000000 | (outR << 16) | (outG << 8) | outB;
+        }
+    }
 }
 
 HBITMAP HDRCapture::CaptureScreen(int& width, int& height, int& originX, int& originY) {
@@ -299,9 +348,24 @@ HBITMAP HDRCapture::CaptureScreen(int& width, int& height, int& originX, int& or
     width   = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     height  = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
+    // STEP 1: ALWAYS capture the screen using the rock-solid, proven BitBlt first!
+    // This ensures that under NO CIRCUMSTANCES will the screen ever be black!
     HDC hdcScreen = GetDC(NULL);
-    HDC hdcMaster = CreateCompatibleDC(hdcScreen);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, width, height);
+    HGDIOBJ hOld = SelectObject(hdcMem, hBitmap);
+    BitBlt(hdcMem, 0, 0, width, height, hdcScreen, originX, originY, SRCCOPY);
+    SelectObject(hdcMem, hOld); // Immediately deselect so it is never locked
+    DeleteDC(hdcMem);
 
+    // STEP 2: Check if HDR is actually enabled on any monitor.
+    // If NO monitors have HDR, return the standard BitBlt bitmap immediately!
+    if (!IsAnyHDREnabled()) {
+        ReleaseDC(NULL, hdcScreen);
+        return hBitmap;
+    }
+
+    // STEP 3: HDR is active! Retrieve pixels from hBitmap into memory buffer for enhancement
     BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = width;
@@ -310,64 +374,65 @@ HBITMAP HDRCapture::CaptureScreen(int& width, int& height, int& originX, int& or
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
 
-    void* pMasterBits = nullptr;
-    HBITMAP hMasterBitmap = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pMasterBits, NULL, 0);
-    if (!hMasterBitmap) {
-        // Fallback to standard compatible bitmap
-        hMasterBitmap = CreateCompatibleBitmap(hdcScreen, width, height);
-        SelectObject(hdcMaster, hMasterBitmap);
-        BitBlt(hdcMaster, 0, 0, width, height, hdcScreen, originX, originY, SRCCOPY);
-        DeleteDC(hdcMaster);
+    std::vector<DWORD> masterPixels(width * height);
+    if (!GetDIBits(hdcScreen, hBitmap, 0, height, masterPixels.data(), &bmi, DIB_RGB_COLORS)) {
         ReleaseDC(NULL, hdcScreen);
-        return hMasterBitmap;
+        return hBitmap; // If reading DIB bits failed, return standard image safely
     }
 
-    SelectObject(hdcMaster, hMasterBitmap);
+    // STEP 4: Process HDR monitors via DXGI Desktop Duplication (GPU direct scRGB capture)
+    IDXGIFactory1* factory = nullptr;
+    if (SUCCEEDED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&factory))) {
+        IDXGIAdapter1* adapter = nullptr;
+        for (UINT a = 0; factory->EnumAdapters1(a, &adapter) != DXGI_ERROR_NOT_FOUND; ++a) {
+            ID3D11Device* d3dDevice = nullptr;
+            ID3D11DeviceContext* d3dContext = nullptr;
+            D3D_FEATURE_LEVEL fl;
 
-    // Initialize D3D11 device
-    ID3D11Device* d3dDevice = nullptr;
-    ID3D11DeviceContext* d3dContext = nullptr;
-    D3D_FEATURE_LEVEL featureLevel;
+            // Create device on the EXACT adapter that drives these outputs (handles hybrid laptops)
+            HRESULT hrDevice = D3D11CreateDevice(
+                adapter,
+                D3D_DRIVER_TYPE_UNKNOWN,
+                nullptr,
+                0,
+                nullptr,
+                0,
+                D3D11_SDK_VERSION,
+                &d3dDevice,
+                &fl,
+                &d3dContext
+            );
 
-    HRESULT hr = D3D11CreateDevice(
-        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-        0, nullptr, 0, D3D11_SDK_VERSION,
-        &d3dDevice, &featureLevel, &d3dContext
-    );
+            IDXGIOutput* dxgiOutput = nullptr;
+            for (UINT o = 0; adapter->EnumOutputs(o, &dxgiOutput) != DXGI_ERROR_NOT_FOUND; ++o) {
+                DXGI_OUTPUT_DESC desc;
+                dxgiOutput->GetDesc(&desc);
 
-    bool anyDxgiSucceeded = false;
-
-    if (SUCCEEDED(hr) && d3dDevice && d3dContext) {
-        IDXGIDevice* dxgiDevice = nullptr;
-        if (SUCCEEDED(d3dDevice->QueryInterface(__uuidof(IDXGIDevice), (void**)&dxgiDevice))) {
-            IDXGIAdapter* dxgiAdapter = nullptr;
-            if (SUCCEEDED(dxgiDevice->GetAdapter(&dxgiAdapter))) {
-                IDXGIOutput* dxgiOutput = nullptr;
-                for (UINT o = 0; dxgiAdapter->EnumOutputs(o, &dxgiOutput) != DXGI_ERROR_NOT_FOUND; ++o) {
-                    DXGI_OUTPUT_DESC desc;
-                    dxgiOutput->GetDesc(&desc);
-
-                    bool isHDR = false;
-                    IDXGIOutput6* output6 = nullptr;
-                    if (SUCCEEDED(dxgiOutput->QueryInterface(__uuidof(IDXGIOutput6), (void**)&output6))) {
-                        DXGI_OUTPUT_DESC1 desc1;
-                        if (SUCCEEDED(output6->GetDesc1(&desc1))) {
-                            if (desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 || desc1.BitsPerColor > 8) {
-                                isHDR = true;
-                            }
+                bool isHDR = false;
+                IDXGIOutput6* output6 = nullptr;
+                if (SUCCEEDED(dxgiOutput->QueryInterface(__uuidof(IDXGIOutput6), (void**)&output6))) {
+                    DXGI_OUTPUT_DESC1 desc1;
+                    if (SUCCEEDED(output6->GetDesc1(&desc1))) {
+                        if (desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 || desc1.BitsPerColor > 8) {
+                            isHDR = true;
                         }
-                        output6->Release();
                     }
+                    output6->Release();
+                }
 
+                if (isHDR) {
                     float sdrMultiplier = GetSdrWhiteLevelForDevice(desc.DeviceName);
+                    std::vector<DWORD> dxgiPixels;
+                    int dxgiW = 0, dxgiH = 0;
+                    bool captured = false;
 
-                    std::vector<DWORD> outPixels;
-                    int outW = 0, outH = 0;
-                    bool captured = CaptureOutputDXGI(
-                        d3dDevice, d3dContext, dxgiOutput,
-                        isHDR, sdrMultiplier,
-                        outPixels, outW, outH
-                    );
+                    if (SUCCEEDED(hrDevice) && d3dDevice && d3dContext) {
+                        captured = CaptureOutputDXGI(
+                            d3dDevice, d3dContext, dxgiOutput,
+                            isHDR, sdrMultiplier,
+                            dxgiPixels, dxgiW, dxgiH
+                        );
+                    }
 
                     RECT r = desc.DesktopCoordinates;
                     int destX = r.left - originX;
@@ -375,14 +440,13 @@ HBITMAP HDRCapture::CaptureScreen(int& width, int& height, int& originX, int& or
                     int destW = r.right - r.left;
                     int destH = r.bottom - r.top;
 
-                    if (captured && pMasterBits && outW > 0 && outH > 0) {
-                        anyDxgiSucceeded = true;
-                        DWORD* pMaster = (DWORD*)pMasterBits;
-                        for (int row = 0; row < destH && row < outH; ++row) {
+                    if (captured && dxgiW > 0 && dxgiH > 0) {
+                        // DXGI succeeded with valid, non-black, tone-mapped HDR pixels!
+                        for (int row = 0; row < destH && row < dxgiH; ++row) {
                             if (destY + row >= 0 && destY + row < height && destX >= 0 && destX < width) {
-                                DWORD* pDstRow = pMaster + (destY + row) * width + destX;
-                                const DWORD* pSrcRow = outPixels.data() + row * outW;
-                                int copyCount = (std::min)(destW, outW);
+                                DWORD* pDstRow = masterPixels.data() + (destY + row) * width + destX;
+                                const DWORD* pSrcRow = dxgiPixels.data() + row * dxgiW;
+                                int copyCount = std::min(destW, dxgiW);
                                 if (destX + copyCount > width) copyCount = width - destX;
                                 if (copyCount > 0) {
                                     memcpy(pDstRow, pSrcRow, copyCount * sizeof(DWORD));
@@ -390,26 +454,24 @@ HBITMAP HDRCapture::CaptureScreen(int& width, int& height, int& originX, int& or
                             }
                         }
                     } else {
-                        // Monitor-level fallback to BitBlt
-                        BitBlt(hdcMaster, destX, destY, destW, destH, hdcScreen, r.left, r.top, SRCCOPY);
+                        // DXGI failed or returned black: Apply anti-overexposure filter on BitBlt pixels
+                        ApplyHdrDeoverexposureFilter(masterPixels, width, height, r, originX, originY, sdrMultiplier);
                     }
-
-                    dxgiOutput->Release();
                 }
-                dxgiAdapter->Release();
+
+                dxgiOutput->Release();
             }
-            dxgiDevice->Release();
+
+            if (d3dContext) d3dContext->Release();
+            if (d3dDevice) d3dDevice->Release();
+            adapter->Release();
         }
-        d3dContext->Release();
-        d3dDevice->Release();
+        factory->Release();
     }
 
-    if (!anyDxgiSucceeded) {
-        // Fallback for entire virtual screen
-        BitBlt(hdcMaster, 0, 0, width, height, hdcScreen, originX, originY, SRCCOPY);
-    }
-
-    DeleteDC(hdcMaster);
+    // STEP 5: Write enhanced pixels back to hBitmap
+    SetDIBits(hdcScreen, hBitmap, 0, height, masterPixels.data(), &bmi, DIB_RGB_COLORS);
     ReleaseDC(NULL, hdcScreen);
-    return hMasterBitmap;
+
+    return hBitmap;
 }
