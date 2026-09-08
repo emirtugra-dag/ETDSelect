@@ -6,6 +6,7 @@
 #include "editor.h"
 #include "app.h"
 #include "resource.h"
+#include "hdr_capture.h"
 
 using namespace Gdiplus;
 using std::min;
@@ -23,19 +24,7 @@ POINT Overlay::s_endPt = { 0, 0 };
 bool Overlay::s_registered = false;
 
 HBITMAP Overlay::CaptureScreen(int& width, int& height, int& originX, int& originY) {
-    originX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    originY = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-
-    HDC hdcScreen = GetDC(NULL);
-    HDC hdcMem = CreateCompatibleDC(hdcScreen);
-    HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, width, height);
-    SelectObject(hdcMem, hBitmap);
-    BitBlt(hdcMem, 0, 0, width, height, hdcScreen, originX, originY, SRCCOPY);
-    DeleteDC(hdcMem);
-    ReleaseDC(NULL, hdcScreen);
-    return hBitmap;
+    return HDRCapture::CaptureScreen(width, height, originX, originY);
 }
 
 void Overlay::RegisterWindowClass(HINSTANCE hInstance) {

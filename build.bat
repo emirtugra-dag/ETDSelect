@@ -13,7 +13,7 @@ if errorlevel 1 (
 set CXX=g++
 set WINDRES=windres
 set CXXFLAGS=-std=c++17 -O2 -finput-charset=UTF-8 -fexec-charset=UTF-8 -DUNICODE -D_UNICODE -mwindows -municode -static -static-libgcc -static-libstdc++
-set LDFLAGS=-lgdiplus -lcomctl32 -lmsimg32 -lcomdlg32 -lshlwapi -luser32 -lgdi32 -lshell32 -lole32
+set LDFLAGS=-lgdiplus -lcomctl32 -lmsimg32 -lcomdlg32 -lshlwapi -luser32 -lgdi32 -lshell32 -lole32 -ld3d11 -ldxgi
 
 :: Create build directory
 if not exist build mkdir build
@@ -35,9 +35,11 @@ if errorlevel 1 goto :compile_error
 if errorlevel 1 goto :compile_error
 %CXX% %CXXFLAGS% -c src/editor.cpp -o build/editor.o
 if errorlevel 1 goto :compile_error
+%CXX% %CXXFLAGS% -c src/hdr_capture.cpp -o build/hdr_capture.o
+if errorlevel 1 goto :compile_error
 
 echo [3/4] Linking ETDSelect.exe...
-%CXX% %CXXFLAGS% build/main.o build/app.o build/settings.o build/i18n.o build/overlay.o build/editor.o build/resource.o -o ETDSelect.exe %LDFLAGS%
+%CXX% %CXXFLAGS% build/main.o build/app.o build/settings.o build/i18n.o build/overlay.o build/editor.o build/hdr_capture.o build/resource.o -o ETDSelect.exe %LDFLAGS%
 if errorlevel 1 goto :compile_error
 
 echo [4/4] Building Installer (ETDSelect_Setup.exe)...
