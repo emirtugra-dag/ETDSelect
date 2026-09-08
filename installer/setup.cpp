@@ -115,7 +115,7 @@ void RegisterUninstall(const wchar_t* installDir, const wchar_t* uninstallerPath
     if (RegCreateKeyExW(HKEY_CURRENT_USER, regPath, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
         std::wstring displayName = L"ETDSelect Screenshot Tool";
         std::wstring publisher = L"Emir Tuğra Dağ";
-        std::wstring version = L"1.0.0";
+        std::wstring version = L"1.0.2";
         std::wstring uninstCmd = L"\"" + std::wstring(uninstallerPath) + L"\" /uninstall";
 
         std::wstring mainExePath = std::wstring(installDir) + L"\\ETDSelect.exe";

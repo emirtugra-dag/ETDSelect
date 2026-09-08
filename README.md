@@ -10,7 +10,7 @@
   <a href="https://microsoft.com/windows"><img src="https://img.shields.io/badge/Platform-Windows-lightgrey.svg" alt="Platform: Windows"></a>
   <a href="https://en.wikipedia.org/wiki/C%2B%2B17"><img src="https://img.shields.io/badge/C%2B%2B-17-blue.svg" alt="C++ Standard: 17"></a>
   <a href="#-language--dil"><img src="https://img.shields.io/badge/Language-TR%20%7C%20EN-brightgreen.svg" alt="Language: TR | EN"></a>
-  <a href="https://github.com/emirtugra-dag/ETDSelect/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/Release-v1.0.0-orange.svg" alt="Release: v1.0.0"></a>
+  <a href="https://github.com/emirtugra-dag/ETDSelect/releases/tag/v1.0.2"><img src="https://img.shields.io/badge/Release-v1.0.2-orange.svg" alt="Release: v1.0.2"></a>
 </p>
 
 <p align="center">
@@ -22,8 +22,8 @@
 
 ## 💾 Direct Downloads / Doğrudan İndirme
 
-- **⚙️ Setup / Kurulum Sihirbazı:** [Download ETDSelect_Setup.exe](https://github.com/emirtugra-dag/ETDSelect/releases/download/v1.0.0/ETDSelect_Setup.exe) *(Recommended)*
-- **🚀 Portable / Taşınabilir Sürüm:** [Download ETDSelect.exe](https://github.com/emirtugra-dag/ETDSelect/releases/download/v1.0.0/ETDSelect.exe) *(No installation needed)*
+- **⚙️ Setup / Kurulum Sihirbazı:** [Download ETDSelect_Setup.exe](https://github.com/emirtugra-dag/ETDSelect/releases/download/v1.0.2/ETDSelect_Setup.exe) *(Recommended)*
+- **🚀 Portable / Taşınabilir Sürüm:** [Download ETDSelect.exe](https://github.com/emirtugra-dag/ETDSelect/releases/download/v1.0.2/ETDSelect.exe) *(No installation needed)*
 
 ---
 
