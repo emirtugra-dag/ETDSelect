@@ -170,21 +170,7 @@ void Editor::Start(RECT selection, HBITMAP screenCapture) {
 
     s_selectionRect = selection;
 
-    HDC hdcScreen = GetDC(NULL);
-    HDC hdcMem = CreateCompatibleDC(hdcScreen);
-    s_baseBitmap = CreateCompatibleBitmap(hdcScreen, s_screenW, s_screenH);
-    SelectObject(hdcMem, s_baseBitmap);
-
-    HDC hdcCap = CreateCompatibleDC(hdcScreen);
-    SelectObject(hdcCap, screenCapture);
-    BitBlt(hdcMem, 0, 0, s_screenW, s_screenH, hdcCap, 0, 0, SRCCOPY);
-    DeleteDC(hdcCap);
-    DeleteDC(hdcMem);
-    ReleaseDC(NULL, hdcScreen);
-
-    if (screenCapture) {
-        DeleteObject(screenCapture);
-    }
+    s_baseBitmap = screenCapture;
 
     // Pre-allocate persistent GDI+ base image and canvas bitmaps
     s_gdiplusBaseBmp = new Gdiplus::Bitmap(s_baseBitmap, NULL);

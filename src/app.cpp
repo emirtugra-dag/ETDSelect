@@ -3,6 +3,7 @@
 #include "overlay.h"
 #include "editor.h"
 #include "i18n.h"
+#include "hdr_capture.h"
 #include <commctrl.h>
 #include <string>
 
@@ -66,6 +67,7 @@ bool App::Init(HINSTANCE hInstance) {
         m_settings.ApplyAutostartRegistry();
     }
 
+    HDRCapture::UpdateDisplayMode();
     RegisterAppHotkey();
     return true;
 }
@@ -133,6 +135,9 @@ LRESULT CALLBACK App::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     Overlay::Start();
                 }
             }
+            break;
+        case WM_DISPLAYCHANGE:
+            HDRCapture::UpdateDisplayMode();
             break;
         case WM_APP_SHOW_SETTINGS:
             App::GetInstance().ShowSettings(false);
