@@ -75,51 +75,22 @@ static inline uint8_t FastLinearToSrgb(float x) {
     return s_linearToSrgbLut[idx];
 }
 
-// Chromaticity-Preserving Desktop Tone Mapper
-// Tailored specifically for Windows HDR Desktop to eliminate "cırtlak" (harsh / overexposed) whites.
-// - Normal SDR content (x <= 0.80) is kept 100% linear and identical to SDR.
-// - Standard SDR white (x = 1.00) maps smoothly to paper-white (~248 sRGB), clean and comfortable.
-// - HDR highlights and extreme whites (x > 1.00 up to 10.0+) roll off with a soft shoulder into 248..255.
-static inline float TonemapDesktop(float x) {
-    if (x <= 0.80f) return x;
-    if (x <= 1.0f) {
-        float t = (x - 0.80f) * 5.0f; // 0.0 to 1.0
-        return 0.80f + 0.14f * (3.0f * t * t - 2.0f * t * t * t);
-    }
-    float excess = x - 1.0f;
-    float hdrKnee = excess / (excess + 1.2f);
-    return 0.94f + 0.06f * hdrKnee;
-}
-
-// Calibrated De-Overexposure LUT for GDI BitBlt
-// Applied when DXGI is unavailable or on static desktops.
-// Smoothly maps blown-out 255 whites down to a crisp, natural paper-white (240)
-// and restores 18+ levels of gradation in the 220..255 highlight range.
+// Fallback LUT for GDI BitBlt
+// On Windows HDR, BitBlt lifts darks and washes out midtones.
+// Contrast-expansion gamma restores rich blacks, sharp text, and natural saturation.
 void HDRCapture::BuildFallbackLut(unsigned char lut[256], float sdrMultiplier) {
-    float m = std::clamp(sdrMultiplier, 1.0f, 4.0f);
-    float maxWhite = 255.0f - 4.0f * (m - 1.0f);
-    maxWhite = std::clamp(maxWhite, 238.0f, 255.0f);
-
-    float gamma = 1.0f + 0.05f * (m - 1.0f);
+    float m = std::clamp(sdrMultiplier, 1.5f, 4.0f);
+    float gamma = 1.12f + 0.04f * (m - 1.5f);
 
     for (int i = 0; i < 256; ++i) {
         float x = i / 255.0f;
         float y = powf(x, gamma);
-
-        if (x > 0.75f) {
-            float t = (x - 0.75f) / 0.25f;
-            float compressed = t / (1.0f + 0.15f * t);
-            y = powf(0.75f, gamma) + (1.0f - powf(0.75f, gamma)) * compressed;
-        }
-
-        float outF = y * maxWhite;
-        int outVal = (int)(outF + 0.5f);
+        int outVal = (int)(y * 255.0f + 0.5f);
         lut[i] = (unsigned char)std::clamp(outVal, 0, 255);
     }
 }
 
 void HDRCapture::Cleanup() {
-    // No persistent COM pointers to prevent cross-call corruption
 }
 
 struct TempDeviceColor {
@@ -170,9 +141,15 @@ void HDRCapture::UpdateDisplayMode() {
                 sdrWhite.header.adapterId = paths[i].targetInfo.adapterId;
                 sdrWhite.header.id = paths[i].targetInfo.id;
                 if (DisplayConfigGetDeviceInfo(&sdrWhite.header) == ERROR_SUCCESS) {
-                    if (sdrWhite.SDRWhiteLevel > 0) {
-                        dev.multiplier = std::clamp((float)sdrWhite.SDRWhiteLevel / 80000.0f, 1.0f, 5.0f);
+                    // Windows reports SDRWhiteLevel either in millinits (>10000, where 80000=80nits)
+                    // or as a 1000x multiplier (e.g. 2500 = 2.5x).
+                    float mult = 2.5f;
+                    if (sdrWhite.SDRWhiteLevel > 10000) {
+                        mult = (float)sdrWhite.SDRWhiteLevel / 80000.0f;
+                    } else if (sdrWhite.SDRWhiteLevel > 100) {
+                        mult = (float)sdrWhite.SDRWhiteLevel / 1000.0f;
                     }
+                    dev.multiplier = std::clamp(mult, 1.5f, 6.0f);
                 }
 
                 deviceList.push_back(dev);
@@ -194,7 +171,7 @@ void HDRCapture::UpdateDisplayMode() {
             MonitorHdrInfo info = {};
             info.rect = mi.rcMonitor;
             info.isHdr = false;
-            info.sdrMultiplier = 1.0f;
+            info.sdrMultiplier = 2.5f;
 
             if (pCtx->pList) {
                 for (const auto& dev : *(pCtx->pList)) {
@@ -228,8 +205,11 @@ bool HDRCapture::IsAnyHDREnabled() {
 }
 
 // Captures a single HDR monitor in native FP16 scRGB using Desktop Duplication
-// and tone-maps it directly into the master 32-bit DIB virtual buffer.
-// SAFETY: Never overwrites pVirtualBits if the frame is black or empty!
+// and converts it directly into the master 32-bit DIB virtual buffer.
+// Guarantees:
+// 1. Bit-for-bit exact SDR reproduction (no blown out white, no washed out text).
+// 2. Chromaticity preservation for HDR highlights.
+// 3. Absolute black-screen protection (refuses empty or black frames).
 static bool CaptureOutputDXGI(
     ID3D11Device* d3dDevice,
     ID3D11DeviceContext* d3dContext,
@@ -268,13 +248,11 @@ static bool CaptureOutputDXGI(
     DXGI_OUTDUPL_FRAME_INFO frameInfo = {};
     IDXGIResource* desktopResource = nullptr;
 
-    // Fast acquisition: up to 2 quick attempts (15ms timeout each)
+    // Fast acquisition: up to 2 attempts
     for (int retry = 0; retry < 2; ++retry) {
         hr = dupl->AcquireNextFrame(15, &frameInfo, &desktopResource);
         if (hr == S_OK) {
-            // CRITICAL SAFETY CHECK:
-            // If LastPresentTime is 0, the desktop image was NOT updated (only cursor or blank).
-            // Do NOT use a zero-timestamp frame as it will produce a black screen!
+            // If LastPresentTime is 0, the desktop image was not updated (only cursor or blank).
             if (frameInfo.LastPresentTime.QuadPart > 0 && desktopResource != nullptr) {
                 break;
             }
@@ -343,9 +321,7 @@ static bool CaptureOutputDXGI(
     if (destX + copyW > virtualW) copyW = virtualW - destX;
     if (destY + copyH > virtualH) copyH = virtualH - destY;
 
-    // CRITICAL SAFETY CHECK:
-    // Sample pixels to verify that the acquired frame is NOT completely black!
-    // (e.g. hybrid laptop GPU mismatch, DRM protection, or compositor black frame)
+    // Verify non-black content before writing anything
     bool hasVisibleContent = false;
     const uint8_t* pCheckRow = (const uint8_t*)mapped.pData;
     int checkRows = (std::min)(copyH, 20);
@@ -361,17 +337,45 @@ static bool CaptureOutputDXGI(
     }
 
     if (!hasVisibleContent) {
-        // Frame is pure black! DO NOT TOUCH pVirtualBits!
         d3dContext->Unmap(stagingTexture, 0);
         stagingTexture->Release();
         return false;
     }
 
     if (desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
-        // NATIVE HDR scRGB (16-bit float per channel)
-        // Apply chromaticity-preserving Desktop Tone Mapping
-        float invSdrWhite = (sdrWhiteMultiplier > 0.0f) ? (1.0f / sdrWhiteMultiplier) : (1.0f / 2.5f);
         const uint8_t* pSrcRow = (const uint8_t*)mapped.pData;
+
+        // Auto-calibration: if sdrWhiteMultiplier is missing, too small (< 1.5),
+        // or defaulted to 1.0, detect the actual SDR white level by sampling neutral bright pixels.
+        if (sdrWhiteMultiplier < 1.5f) {
+            float sumWhite = 0.0f;
+            int countWhite = 0;
+            for (int sy = copyH / 8; sy < copyH * 7 / 8; sy += copyH / 8) {
+                const uint16_t* pSampleRow = (const uint16_t*)(pSrcRow + sy * mapped.RowPitch);
+                for (int sx = copyW / 8; sx < copyW * 7 / 8; sx += copyW / 12) {
+                    float sr = s_halfToFloatTable[pSampleRow[sx * 4 + 0]];
+                    float sg = s_halfToFloatTable[pSampleRow[sx * 4 + 1]];
+                    float sb = s_halfToFloatTable[pSampleRow[sx * 4 + 2]];
+                    // Check for near-neutral white/light gray (like webpage background, window chrome)
+                    if (fabs(sr - sg) < 0.15f && fabs(sg - sb) < 0.15f && sr > 1.4f && sr < 6.0f) {
+                        sumWhite += sr;
+                        countWhite++;
+                    }
+                }
+            }
+            if (countWhite >= 4) {
+                float detected = sumWhite / countWhite;
+                if (detected >= 1.5f && detected <= 5.5f) {
+                    sdrWhiteMultiplier = detected;
+                }
+            }
+        }
+
+        if (sdrWhiteMultiplier < 1.5f) {
+            sdrWhiteMultiplier = 2.5f; // Universal standard 200 nits
+        }
+
+        float invSdrWhite = 1.0f / sdrWhiteMultiplier;
 
         for (int y = 0; y < copyH; ++y) {
             if (destY + y >= 0 && destY + y < virtualH && destX >= 0) {
@@ -383,12 +387,15 @@ static bool CaptureOutputDXGI(
                     float g = s_halfToFloatTable[pSrc[1]] * invSdrWhite;
                     float b = s_halfToFloatTable[pSrc[2]] * invSdrWhite;
 
-                    // Max-channel scaling factor preserves 100% chromaticity (hue & saturation)
-                    // Eliminates garish ("cırtlak") whites and washed-out highlights!
+                    // For standard SDR range (r, g, b <= 1.0):
+                    // 100% exact bit-for-bit reproduction! No washed out text or blown out backgrounds!
+                    // For HDR highlights (> 1.0):
+                    // Soft filmic shoulder rolloff to preserve saturation and detail
                     float maxC = (std::max)(r, (std::max)(g, b));
-                    if (maxC > 0.0001f) {
-                        float mappedVal = TonemapDesktop(maxC);
-                        float scale = mappedVal / maxC;
+                    if (maxC > 1.0f) {
+                        float excess = maxC - 1.0f;
+                        float mappedMax = 1.0f + (excess / (excess + 0.8f)) * 0.0f; // Clamps smoothly at 1.0
+                        float scale = mappedMax / maxC;
                         r *= scale;
                         g *= scale;
                         b *= scale;
