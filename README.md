@@ -38,6 +38,7 @@
 ### 🌟 Key Features
 
 - **⚡ Zero-Flicker Transition:** Seamless 0ms transition from capture overlay to editor. The screen never flickers or flashes black.
+- **🖥️ Native HDR Support & Intelligent Tone Mapping:** Full support for HDR monitors without overexposed or washed-out whites. Automatically captures DirectX FP16 scRGB wide dynamic range and tone-maps to standard sRGB with zero lag, pure chromaticity preservation, and bit-for-bit SDR color fidelity.
 - **📋 Dual PNG & DIB Clipboard Support:** Images copy directly in `PNG`, `image/png`, `CF_DIB`, and `CF_BITMAP` formats for 100% compatibility with Discord, WhatsApp, Telegram, MS Word, Slack, Photoshop, and MS Paint.
 - **🖐️ Move & 8-Point Resizing:** Drag selection using handles or move the entire selection with 🖐️ Move Tool, `Space + Drag`, or Middle Mouse Click.
 - **🎨 Rich Annotation Tools:**
@@ -81,6 +82,7 @@ build.bat
 ### 🌟 Öne Çıkan Özellikler
 
 - **⚡ Sıfır Kırpışma (Zero-Flicker) Ekran Devri:** Seçim ekranından çizim ekranına geçerken 0ms kesintisiz görsel aktarım. Ekran asla kararmaz veya parlamaz.
+- **🖥️ Doğal HDR Desteği ve Akıllı Ton Haritalama:** HDR monitörlerde beyazların parlamasını ve patlamasını ("cırtlak" beyazlar) tamamen engelleyen gelişmiş DXGI FP16 scRGB ton haritalama desteği. SDR pencerelerde %100 birebir renk doğruluğu, HDR parlaklıklarında yumuşak eğri ve sıfır gecikmeli yakalama.
 - **📋 Gelişmiş PNG & DIB Pano Desteği:** Görseller doğrudan `PNG`, `image/png`, `CF_DIB` ve `CF_BITMAP` formatlarında panoya kopyalanır. Discord, WhatsApp, Telegram, Word, Slack, Photoshop ve Paint ile %100 uyumludur.
 - **🖐️ Taşıma ve 8 Noktalı Boyutlandırma:** Seçim kutusunu Tutamaçlarından çekerek yeniden boyutlandırın veya 🖐️ Taşıma Aracı / `Space + Sürükle` / Orta Fare Tuşu ile ekranda serbestçe taşıyın.
 - **🎨 Zengin Çizim Araçları:** Kalem, Ok, İçi Boş/Dolu Dikdörtgen, Metin Ekleme, Mozayik (Sansür), Fosforlu Kalem, Silgi ve 12 Renkli Palet.
