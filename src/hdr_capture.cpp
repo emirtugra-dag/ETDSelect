@@ -13,11 +13,6 @@ bool HDRCapture::s_initialized = false;
 bool HDRCapture::s_anyHdrActive = false;
 std::vector<MonitorHdrInfo> HDRCapture::s_monitors;
 
-// Cached D3D11 Device & Context for zero-delay capture
-static ID3D11Device* s_cachedDevice = nullptr;
-static ID3D11DeviceContext* s_cachedContext = nullptr;
-static IDXGIAdapter1* s_cachedAdapter = nullptr;
-
 // Pre-computed Half-Float to Float table (65536 entries, 256 KB)
 static float s_halfToFloatTable[65536];
 // Fast 12-bit Linear to sRGB table (4096 entries, 4 KB)
@@ -81,11 +76,10 @@ static inline uint8_t FastLinearToSrgb(float x) {
 }
 
 // Chromaticity-Preserving Desktop Tone Mapper
-// Tailored specifically for Windows HDR Desktop to eliminate "cırtlak" (garish / overexposed) whites.
+// Tailored specifically for Windows HDR Desktop to eliminate "cırtlak" (harsh / overexposed) whites.
 // - Normal SDR content (x <= 0.80) is kept 100% linear and identical to SDR.
 // - Standard SDR white (x = 1.00) maps smoothly to paper-white (~248 sRGB), clean and comfortable.
 // - HDR highlights and extreme whites (x > 1.00 up to 10.0+) roll off with a soft shoulder into 248..255.
-// - Preserves fine detail in bright areas (clouds, glowing text, reflections, white UI).
 static inline float TonemapDesktop(float x) {
     if (x <= 0.80f) return x;
     if (x <= 1.0f) {
@@ -94,47 +88,38 @@ static inline float TonemapDesktop(float x) {
     }
     float excess = x - 1.0f;
     float hdrKnee = excess / (excess + 1.2f);
-    return 0.94f + 0.06f * hdrKnee; // Softly approaches 1.00 (255)
+    return 0.94f + 0.06f * hdrKnee;
 }
 
-// Fallback LUT for GDI BitBlt when DXGI is unavailable
+// Calibrated De-Overexposure LUT for GDI BitBlt
+// Applied when DXGI is unavailable or on static desktops.
+// Smoothly maps blown-out 255 whites down to a crisp, natural paper-white (240)
+// and restores 18+ levels of gradation in the 220..255 highlight range.
 void HDRCapture::BuildFallbackLut(unsigned char lut[256], float sdrMultiplier) {
-    float strength = std::clamp((sdrMultiplier - 1.0f) / 2.0f, 0.0f, 1.0f);
-    float gamma = 1.0f + 0.16f * strength;
+    float m = std::clamp(sdrMultiplier, 1.0f, 4.0f);
+    float maxWhite = 255.0f - 4.0f * (m - 1.0f);
+    maxWhite = std::clamp(maxWhite, 238.0f, 255.0f);
 
-    float knee = 0.80f;
-    float kneeY = powf(knee, gamma);
+    float gamma = 1.0f + 0.05f * (m - 1.0f);
 
     for (int i = 0; i < 256; ++i) {
         float x = i / 255.0f;
-        float y = 0.0f;
+        float y = powf(x, gamma);
 
-        if (x <= knee) {
-            y = powf(x, gamma);
-        } else {
-            float t = (x - knee) / (1.0f - knee);
-            float roll = (t * 1.3f) / (1.0f + 0.3f * t);
-            y = kneeY + (1.0f - kneeY) * roll;
+        if (x > 0.75f) {
+            float t = (x - 0.75f) / 0.25f;
+            float compressed = t / (1.0f + 0.15f * t);
+            y = powf(0.75f, gamma) + (1.0f - powf(0.75f, gamma)) * compressed;
         }
 
-        int outVal = (int)(y * 255.0f + 0.5f);
+        float outF = y * maxWhite;
+        int outVal = (int)(outF + 0.5f);
         lut[i] = (unsigned char)std::clamp(outVal, 0, 255);
     }
 }
 
 void HDRCapture::Cleanup() {
-    if (s_cachedContext) {
-        s_cachedContext->Release();
-        s_cachedContext = nullptr;
-    }
-    if (s_cachedDevice) {
-        s_cachedDevice->Release();
-        s_cachedDevice = nullptr;
-    }
-    if (s_cachedAdapter) {
-        s_cachedAdapter->Release();
-        s_cachedAdapter = nullptr;
-    }
+    // No persistent COM pointers to prevent cross-call corruption
 }
 
 struct TempDeviceColor {
@@ -145,7 +130,6 @@ struct TempDeviceColor {
 
 void HDRCapture::UpdateDisplayMode() {
     InitLookupTables();
-    Cleanup();
 
     s_monitors.clear();
     s_anyHdrActive = false;
@@ -245,6 +229,7 @@ bool HDRCapture::IsAnyHDREnabled() {
 
 // Captures a single HDR monitor in native FP16 scRGB using Desktop Duplication
 // and tone-maps it directly into the master 32-bit DIB virtual buffer.
+// SAFETY: Never overwrites pVirtualBits if the frame is black or empty!
 static bool CaptureOutputDXGI(
     ID3D11Device* d3dDevice,
     ID3D11DeviceContext* d3dContext,
@@ -283,15 +268,29 @@ static bool CaptureOutputDXGI(
     DXGI_OUTDUPL_FRAME_INFO frameInfo = {};
     IDXGIResource* desktopResource = nullptr;
 
-    // Fast acquisition (tight 20ms timeout)
-    hr = dupl->AcquireNextFrame(20, &frameInfo, &desktopResource);
-    if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
-        // Nudge cursor imperceptibly to wake up DWM compositor on static desktop
-        mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, 0);
-        hr = dupl->AcquireNextFrame(25, &frameInfo, &desktopResource);
+    // Fast acquisition: up to 2 quick attempts (15ms timeout each)
+    for (int retry = 0; retry < 2; ++retry) {
+        hr = dupl->AcquireNextFrame(15, &frameInfo, &desktopResource);
+        if (hr == S_OK) {
+            // CRITICAL SAFETY CHECK:
+            // If LastPresentTime is 0, the desktop image was NOT updated (only cursor or blank).
+            // Do NOT use a zero-timestamp frame as it will produce a black screen!
+            if (frameInfo.LastPresentTime.QuadPart > 0 && desktopResource != nullptr) {
+                break;
+            }
+            if (desktopResource) {
+                desktopResource->Release();
+                desktopResource = nullptr;
+            }
+            dupl->ReleaseFrame();
+        }
+        if (hr != DXGI_ERROR_WAIT_TIMEOUT) {
+            break;
+        }
     }
 
-    if (FAILED(hr) || !desktopResource) {
+    if (FAILED(hr) || !desktopResource || frameInfo.LastPresentTime.QuadPart == 0) {
+        if (desktopResource) desktopResource->Release();
         dupl->Release();
         return false;
     }
@@ -343,6 +342,30 @@ static bool CaptureOutputDXGI(
 
     if (destX + copyW > virtualW) copyW = virtualW - destX;
     if (destY + copyH > virtualH) copyH = virtualH - destY;
+
+    // CRITICAL SAFETY CHECK:
+    // Sample pixels to verify that the acquired frame is NOT completely black!
+    // (e.g. hybrid laptop GPU mismatch, DRM protection, or compositor black frame)
+    bool hasVisibleContent = false;
+    const uint8_t* pCheckRow = (const uint8_t*)mapped.pData;
+    int checkRows = (std::min)(copyH, 20);
+    for (int r = 0; r < checkRows && !hasVisibleContent; ++r) {
+        const uint32_t* pRow32 = (const uint32_t*)(pCheckRow + r * mapped.RowPitch);
+        int checkCols = (std::min)(copyW, 100);
+        for (int c = 0; c < checkCols; ++c) {
+            if ((pRow32[c] & 0x00FFFFFF) != 0) {
+                hasVisibleContent = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasVisibleContent) {
+        // Frame is pure black! DO NOT TOUCH pVirtualBits!
+        d3dContext->Unmap(stagingTexture, 0);
+        stagingTexture->Release();
+        return false;
+    }
 
     if (desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
         // NATIVE HDR scRGB (16-bit float per channel)
@@ -413,8 +436,7 @@ HBITMAP HDRCapture::CaptureScreen(int& width, int& height, int& originX, int& or
 
     HDC hdcScreen = GetDC(NULL);
 
-    // STEP 1: Always allocate top-down 32-bit DIBSection directly.
-    // Zero heap churn, zero GetDIBits/SetDIBits overhead.
+    // STEP 1: Allocate top-down 32-bit DIBSection directly.
     BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = width;
@@ -444,7 +466,9 @@ HBITMAP HDRCapture::CaptureScreen(int& width, int& height, int& originX, int& or
         return hBitmap;
     }
 
-    // STEP 2: HDR is active! Capture HDR monitors in native FP16 scRGB via DXGI
+    // STEP 2: HDR is active! Try native FP16 scRGB capture via DXGI Desktop Duplication.
+    // If DXGI fails or returns black, seamlessly fall back to applying the calibrated
+    // de-overexposure LUT to the BitBlt pixels. (ZERO risk of black screen!)
     IDXGIFactory1* factory = nullptr;
     if (SUCCEEDED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&factory))) {
         IDXGIAdapter1* adapter = nullptr;
@@ -453,37 +477,20 @@ HBITMAP HDRCapture::CaptureScreen(int& width, int& height, int& originX, int& or
             ID3D11DeviceContext* d3dContext = nullptr;
             D3D_FEATURE_LEVEL fl;
 
-            // Reuse cached device if adapter matches, otherwise create
-            if (s_cachedDevice && s_cachedContext && s_cachedAdapter == adapter) {
-                d3dDevice = s_cachedDevice;
-                d3dContext = s_cachedContext;
-                d3dDevice->AddRef();
-                d3dContext->AddRef();
-            } else {
-                HRESULT hrDev = D3D11CreateDevice(
-                    adapter,
-                    D3D_DRIVER_TYPE_UNKNOWN,
-                    nullptr,
-                    0,
-                    nullptr,
-                    0,
-                    D3D11_SDK_VERSION,
-                    &d3dDevice,
-                    &fl,
-                    &d3dContext
-                );
-                if (SUCCEEDED(hrDev)) {
-                    Cleanup();
-                    s_cachedDevice = d3dDevice;
-                    s_cachedContext = d3dContext;
-                    s_cachedAdapter = adapter;
-                    s_cachedDevice->AddRef();
-                    s_cachedContext->AddRef();
-                    s_cachedAdapter->AddRef();
-                }
-            }
+            HRESULT hrDev = D3D11CreateDevice(
+                adapter,
+                D3D_DRIVER_TYPE_UNKNOWN,
+                nullptr,
+                0,
+                nullptr,
+                0,
+                D3D11_SDK_VERSION,
+                &d3dDevice,
+                &fl,
+                &d3dContext
+            );
 
-            if (d3dDevice && d3dContext) {
+            if (SUCCEEDED(hrDev) && d3dDevice && d3dContext) {
                 IDXGIOutput* dxgiOutput = nullptr;
                 for (UINT o = 0; adapter->EnumOutputs(o, &dxgiOutput) != DXGI_ERROR_NOT_FOUND; ++o) {
                     DXGI_OUTPUT_DESC desc;
@@ -518,7 +525,7 @@ HBITMAP HDRCapture::CaptureScreen(int& width, int& height, int& originX, int& or
                         );
 
                         if (!captured) {
-                            // DXGI fallback: apply anti-glare LUT on BitBlt pixels
+                            // DXGI was unavailable or static: Apply calibrated de-overexposure LUT on BitBlt pixels
                             int x0 = (std::max)(0, (int)(desc.DesktopCoordinates.left - originX));
                             int y0 = (std::max)(0, (int)(desc.DesktopCoordinates.top - originY));
                             int x1 = (std::min)(width, (int)(desc.DesktopCoordinates.right - originX));
