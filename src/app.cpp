@@ -81,6 +81,7 @@ void App::Run() {
 }
 
 void App::Cleanup() {
+    HDRCapture::Cleanup();
     UnregisterAppHotkey();
     if (m_hwnd) {
         DestroyWindow(m_hwnd);
