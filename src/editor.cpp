@@ -1393,7 +1393,11 @@ void Editor::CopyToClipboard(HWND hwnd) {
     // 1. Prepare temp directory: %TEMP%\ETDSelect
     wchar_t tempPath[MAX_PATH];
     DWORD len = GetTempPathW(MAX_PATH, tempPath);
-    std::wstring tempDir = (len > 0) ? (std::wstring(tempPath, len) + L"ETDSelect") : L"ETDSelect";
+    std::wstring tempDir = (len > 0) ? std::wstring(tempPath, len) : L"";
+    while (!tempDir.empty() && (tempDir.back() == L'\\' || tempDir.back() == L'/')) {
+        tempDir.pop_back();
+    }
+    tempDir += L"\\ETDSelect";
     CreateDirectoryW(tempDir.c_str(), NULL);
 
     // 2. Generate timestamp-based filename: resim_YYYYMMDD_HHMMSS.png
@@ -1401,7 +1405,9 @@ void Editor::CopyToClipboard(HWND hwnd) {
     struct tm tmInfo;
     localtime_s(&tmInfo, &t);
     wchar_t baseName[128];
-    wcsftime(baseName, 128, L"resim_%Y%m%d_%H%M%S", &tmInfo);
+    swprintf_s(baseName, 128, L"resim_%04d%02d%02d_%02d%02d%02d",
+               tmInfo.tm_year + 1900, tmInfo.tm_mon + 1, tmInfo.tm_mday,
+               tmInfo.tm_hour, tmInfo.tm_min, tmInfo.tm_sec);
 
     std::wstring fileNameOnly = std::wstring(baseName) + L".png";
     std::wstring fullPath = tempDir + L"\\" + fileNameOnly;
@@ -1461,46 +1467,7 @@ void Editor::CopyToClipboard(HWND hwnd) {
         }
     }
 
-    // 6. Build FileGroupDescriptorW (CFSTR_FILEDESCRIPTORW) and FileContents
-    UINT cfFileDescriptor = RegisterClipboardFormatW(CFSTR_FILEDESCRIPTORW);
-    UINT cfFileContents = RegisterClipboardFormatW(CFSTR_FILECONTENTS);
-    HGLOBAL hFileDesc = NULL;
-    HGLOBAL hFileContents = NULL;
-    if (cfFileDescriptor && hPng && pngSize > 0) {
-        hFileDesc = GlobalAlloc(GHND | GMEM_SHARE, sizeof(FILEGROUPDESCRIPTORW));
-        if (hFileDesc) {
-            FILEGROUPDESCRIPTORW* pFgd = (FILEGROUPDESCRIPTORW*)GlobalLock(hFileDesc);
-            if (pFgd) {
-                pFgd->cItems = 1;
-                FILEDESCRIPTORW& fd = pFgd->fgd[0];
-                memset(&fd, 0, sizeof(FILEDESCRIPTORW));
-                fd.dwFlags = FD_FILESIZE | FD_ATTRIBUTES;
-                fd.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
-                fd.nFileSizeHigh = 0;
-                fd.nFileSizeLow = (DWORD)pngSize;
-                wcsncpy_s(fd.cFileName, MAX_PATH, fileNameOnly.c_str(), _TRUNCATE);
-                GlobalUnlock(hFileDesc);
-            } else {
-                GlobalFree(hFileDesc);
-                hFileDesc = NULL;
-            }
-        }
-
-        if (cfFileContents) {
-            hFileContents = GlobalAlloc(GHND | GMEM_SHARE, pngSize);
-            if (hFileContents) {
-                void* pSrc = GlobalLock(hPng);
-                void* pDst = GlobalLock(hFileContents);
-                if (pSrc && pDst) {
-                    memcpy(pDst, pSrc, pngSize);
-                }
-                if (pSrc) GlobalUnlock(hPng);
-                if (pDst) GlobalUnlock(hFileContents);
-            }
-        }
-    }
-
-    // 7. Duplicate PNG buffer for image/png format
+    // 6. Duplicate PNG buffer for image/png format
     UINT cfPng = RegisterClipboardFormatW(L"PNG");
     UINT cfImagePng = RegisterClipboardFormatW(L"image/png");
     HGLOBAL hPngDup = NULL;
@@ -1533,14 +1500,6 @@ void Editor::CopyToClipboard(HWND hwnd) {
             SetClipboardData(CF_HDROP, hDrop);
             hDrop = NULL;
         }
-        if (hFileDesc && cfFileDescriptor) {
-            SetClipboardData(cfFileDescriptor, hFileDesc);
-            hFileDesc = NULL;
-        }
-        if (hFileContents && cfFileContents) {
-            SetClipboardData(cfFileContents, hFileContents);
-            hFileContents = NULL;
-        }
         if (hPng && cfPng) {
             SetClipboardData(cfPng, hPng);
             hPng = NULL;
@@ -1563,8 +1522,6 @@ void Editor::CopyToClipboard(HWND hwnd) {
     }
 
     if (hDrop) GlobalFree(hDrop);
-    if (hFileDesc) GlobalFree(hFileDesc);
-    if (hFileContents) GlobalFree(hFileContents);
     if (hPng) GlobalFree(hPng);
     if (hPngDup) GlobalFree(hPngDup);
     if (hDib) GlobalFree(hDib);
