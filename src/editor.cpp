@@ -1350,6 +1350,36 @@ static HGLOBAL BitmapToHGlobalDIB(Bitmap* bmp) {
     return hGlobal;
 }
 
+static void CleanTempCache(const std::wstring& tempDir) {
+    std::wstring searchPattern = tempDir + L"\\resim_*.png";
+    WIN32_FIND_DATAW fd;
+    HANDLE hFind = FindFirstFileW(searchPattern.c_str(), &fd);
+    if (hFind == INVALID_HANDLE_VALUE) return;
+
+    FILETIME nowFt;
+    GetSystemTimeAsFileTime(&nowFt);
+    ULARGE_INTEGER nowVal;
+    nowVal.LowPart = nowFt.dwLowDateTime;
+    nowVal.HighPart = nowFt.dwHighDateTime;
+
+    // 24 hours in 100-nanosecond intervals: 24 * 3600 * 10^7
+    const ULONGLONG oneDayTicks = (ULONGLONG)24 * 3600 * 10000000ULL;
+
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            ULARGE_INTEGER fileVal;
+            fileVal.LowPart = fd.ftLastWriteTime.dwLowDateTime;
+            fileVal.HighPart = fd.ftLastWriteTime.dwHighDateTime;
+            if (nowVal.QuadPart > fileVal.QuadPart && (nowVal.QuadPart - fileVal.QuadPart) > oneDayTicks) {
+                std::wstring filePath = tempDir + L"\\" + fd.cFileName;
+                DeleteFileW(filePath.c_str());
+            }
+        }
+    } while (FindNextFileW(hFind, &fd));
+
+    FindClose(hFind);
+}
+
 void Editor::CopyToClipboard(HWND hwnd) {
     Bitmap* bmp = CompositeFinalImage();
     if (!bmp) return;
@@ -1360,8 +1390,132 @@ void Editor::CopyToClipboard(HWND hwnd) {
     bmp->GetHBITMAP(Color(255, 255, 255, 255), &hbm);
     delete bmp;
 
+    // 1. Prepare temp directory: %TEMP%\ETDSelect
+    wchar_t tempPath[MAX_PATH];
+    DWORD len = GetTempPathW(MAX_PATH, tempPath);
+    std::wstring tempDir = (len > 0) ? (std::wstring(tempPath, len) + L"ETDSelect") : L"ETDSelect";
+    CreateDirectoryW(tempDir.c_str(), NULL);
+
+    // 2. Generate timestamp-based filename: resim_YYYYMMDD_HHMMSS.png
+    time_t t = time(NULL);
+    struct tm tmInfo;
+    localtime_s(&tmInfo, &t);
+    wchar_t baseName[128];
+    wcsftime(baseName, 128, L"resim_%Y%m%d_%H%M%S", &tmInfo);
+
+    std::wstring fileNameOnly = std::wstring(baseName) + L".png";
+    std::wstring fullPath = tempDir + L"\\" + fileNameOnly;
+
+    // If file already exists in same second, append milliseconds
+    if (GetFileAttributesW(fullPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        wchar_t msSuffix[32];
+        swprintf_s(msSuffix, 32, L"_%03d.png", st.wMilliseconds);
+        fileNameOnly = std::wstring(baseName) + msSuffix;
+        fullPath = tempDir + L"\\" + fileNameOnly;
+    }
+
+    // 3. Write PNG bytes to temp file for CF_HDROP and shell integration
+    SIZE_T pngSize = hPng ? GlobalSize(hPng) : 0;
+    if (hPng && pngSize > 0) {
+        void* pPngData = GlobalLock(hPng);
+        if (pPngData) {
+            HANDLE hFile = CreateFileW(fullPath.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (hFile != INVALID_HANDLE_VALUE) {
+                DWORD written = 0;
+                WriteFile(hFile, pPngData, (DWORD)pngSize, &written, NULL);
+                CloseHandle(hFile);
+            }
+            GlobalUnlock(hPng);
+        }
+    }
+
+    // 4. Housekeeping: delete cache files older than 24 hours
+    CleanTempCache(tempDir);
+
+    // 5. Build CF_HDROP structure
+    HGLOBAL hDrop = NULL;
+    if (GetFileAttributesW(fullPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        size_t pathChars = fullPath.length() + 2; // +1 for null, +1 for double null
+        size_t totalBytes = sizeof(DROPFILES) + pathChars * sizeof(wchar_t);
+        hDrop = GlobalAlloc(GHND | GMEM_SHARE, totalBytes);
+        if (hDrop) {
+            DROPFILES* pDrop = (DROPFILES*)GlobalLock(hDrop);
+            if (pDrop) {
+                pDrop->pFiles = sizeof(DROPFILES);
+                pDrop->pt.x = 0;
+                pDrop->pt.y = 0;
+                pDrop->fNC = FALSE;
+                pDrop->fWide = TRUE;
+
+                wchar_t* pFileList = (wchar_t*)((BYTE*)pDrop + sizeof(DROPFILES));
+                memcpy(pFileList, fullPath.c_str(), (fullPath.length() + 1) * sizeof(wchar_t));
+                pFileList[fullPath.length() + 1] = L'\0';
+
+                GlobalUnlock(hDrop);
+            } else {
+                GlobalFree(hDrop);
+                hDrop = NULL;
+            }
+        }
+    }
+
+    // 6. Build FileGroupDescriptorW (CFSTR_FILEDESCRIPTORW) and FileContents
+    UINT cfFileDescriptor = RegisterClipboardFormatW(CFSTR_FILEDESCRIPTORW);
+    UINT cfFileContents = RegisterClipboardFormatW(CFSTR_FILECONTENTS);
+    HGLOBAL hFileDesc = NULL;
+    HGLOBAL hFileContents = NULL;
+    if (cfFileDescriptor && hPng && pngSize > 0) {
+        hFileDesc = GlobalAlloc(GHND | GMEM_SHARE, sizeof(FILEGROUPDESCRIPTORW));
+        if (hFileDesc) {
+            FILEGROUPDESCRIPTORW* pFgd = (FILEGROUPDESCRIPTORW*)GlobalLock(hFileDesc);
+            if (pFgd) {
+                pFgd->cItems = 1;
+                FILEDESCRIPTORW& fd = pFgd->fgd[0];
+                memset(&fd, 0, sizeof(FILEDESCRIPTORW));
+                fd.dwFlags = FD_FILESIZE | FD_ATTRIBUTES;
+                fd.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
+                fd.nFileSizeHigh = 0;
+                fd.nFileSizeLow = (DWORD)pngSize;
+                wcsncpy_s(fd.cFileName, MAX_PATH, fileNameOnly.c_str(), _TRUNCATE);
+                GlobalUnlock(hFileDesc);
+            } else {
+                GlobalFree(hFileDesc);
+                hFileDesc = NULL;
+            }
+        }
+
+        if (cfFileContents) {
+            hFileContents = GlobalAlloc(GHND | GMEM_SHARE, pngSize);
+            if (hFileContents) {
+                void* pSrc = GlobalLock(hPng);
+                void* pDst = GlobalLock(hFileContents);
+                if (pSrc && pDst) {
+                    memcpy(pDst, pSrc, pngSize);
+                }
+                if (pSrc) GlobalUnlock(hPng);
+                if (pDst) GlobalUnlock(hFileContents);
+            }
+        }
+    }
+
+    // 7. Duplicate PNG buffer for image/png format
     UINT cfPng = RegisterClipboardFormatW(L"PNG");
     UINT cfImagePng = RegisterClipboardFormatW(L"image/png");
+    HGLOBAL hPngDup = NULL;
+    if (hPng && cfImagePng && pngSize > 0) {
+        hPngDup = GlobalAlloc(GHND | GMEM_SHARE, pngSize);
+        if (hPngDup) {
+            void* pSrc = GlobalLock(hPng);
+            void* pDst = GlobalLock(hPngDup);
+            if (pSrc && pDst) {
+                memcpy(pDst, pSrc, pngSize);
+            }
+            if (pSrc) GlobalUnlock(hPng);
+            if (pDst) GlobalUnlock(hPngDup);
+        }
+    }
 
     bool opened = false;
     for (int i = 0; i < 10; i++) {
@@ -1375,37 +1529,46 @@ void Editor::CopyToClipboard(HWND hwnd) {
     if (opened) {
         EmptyClipboard();
 
+        if (hDrop) {
+            SetClipboardData(CF_HDROP, hDrop);
+            hDrop = NULL;
+        }
+        if (hFileDesc && cfFileDescriptor) {
+            SetClipboardData(cfFileDescriptor, hFileDesc);
+            hFileDesc = NULL;
+        }
+        if (hFileContents && cfFileContents) {
+            SetClipboardData(cfFileContents, hFileContents);
+            hFileContents = NULL;
+        }
         if (hPng && cfPng) {
             SetClipboardData(cfPng, hPng);
+            hPng = NULL;
         }
-        if (hPng && cfImagePng) {
-            SIZE_T sz = GlobalSize(hPng);
-            HGLOBAL hPngDup = GlobalAlloc(GHND | GMEM_SHARE, sz);
-            if (hPngDup) {
-                void* pSrc = GlobalLock(hPng);
-                void* pDst = GlobalLock(hPngDup);
-                if (pSrc && pDst) {
-                    memcpy(pDst, pSrc, sz);
-                }
-                if (pSrc) GlobalUnlock(hPng);
-                if (pDst) GlobalUnlock(hPngDup);
-                SetClipboardData(cfImagePng, hPngDup);
-            }
+        if (hPngDup && cfImagePng) {
+            SetClipboardData(cfImagePng, hPngDup);
+            hPngDup = NULL;
         }
         if (hDib) {
             SetClipboardData(CF_DIB, hDib);
+            hDib = NULL;
         }
         if (hbm) {
             SetClipboardData(CF_BITMAP, hbm);
+            hbm = NULL;
         }
 
         CloseClipboard();
         App::GetInstance().ShowNotification(L"ETDSelect", I18n::Get("NOTIF_COPY"));
-    } else {
-        if (hPng) GlobalFree(hPng);
-        if (hDib) GlobalFree(hDib);
-        if (hbm) DeleteObject(hbm);
     }
+
+    if (hDrop) GlobalFree(hDrop);
+    if (hFileDesc) GlobalFree(hFileDesc);
+    if (hFileContents) GlobalFree(hFileContents);
+    if (hPng) GlobalFree(hPng);
+    if (hPngDup) GlobalFree(hPngDup);
+    if (hDib) GlobalFree(hDib);
+    if (hbm) DeleteObject(hbm);
 }
 
 void Editor::Undo() {

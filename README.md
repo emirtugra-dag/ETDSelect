@@ -10,7 +10,7 @@
   <a href="https://microsoft.com/windows"><img src="https://img.shields.io/badge/Platform-Windows-lightgrey.svg" alt="Platform: Windows"></a>
   <a href="https://en.wikipedia.org/wiki/C%2B%2B17"><img src="https://img.shields.io/badge/C%2B%2B-17-blue.svg" alt="C++ Standard: 17"></a>
   <a href="#-language--dil"><img src="https://img.shields.io/badge/Language-TR%20%7C%20EN-brightgreen.svg" alt="Language: TR | EN"></a>
-  <a href="https://github.com/emirtugra-dag/ETDSelect/releases/tag/v1.0.2"><img src="https://img.shields.io/badge/Release-v1.0.2-orange.svg" alt="Release: v1.0.2"></a>
+  <a href="https://github.com/emirtugra-dag/ETDSelect/releases/tag/v1.0.3"><img src="https://img.shields.io/badge/Release-v1.0.3-orange.svg" alt="Release: v1.0.3"></a>
 </p>
 
 <p align="center">
@@ -22,8 +22,8 @@
 
 ## 💾 Direct Downloads / Doğrudan İndirme
 
-- **⚙️ Setup / Kurulum Sihirbazı:** [Download ETDSelect_Setup.exe](https://github.com/emirtugra-dag/ETDSelect/releases/download/v1.0.2/ETDSelect_Setup.exe) *(Recommended)*
-- **🚀 Portable / Taşınabilir Sürüm:** [Download ETDSelect.exe](https://github.com/emirtugra-dag/ETDSelect/releases/download/v1.0.2/ETDSelect.exe) *(No installation needed)*
+- **⚙️ Setup / Kurulum Sihirbazı:** [Download ETDSelect_Setup.exe](https://github.com/emirtugra-dag/ETDSelect/releases/download/v1.0.3/ETDSelect_Setup.exe) *(Recommended)*
+- **🚀 Portable / Taşınabilir Sürüm:** [Download ETDSelect.exe](https://github.com/emirtugra-dag/ETDSelect/releases/download/v1.0.3/ETDSelect.exe) *(No installation needed)*
 
 ---
 
@@ -39,7 +39,7 @@
 
 - **⚡ Zero-Flicker Transition:** Seamless 0ms transition from capture overlay to editor. The screen never flickers or flashes black.
 - **🖥️ Native HDR Support & Intelligent Tone Mapping:** Full support for HDR monitors without overexposed or washed-out whites. Automatically captures DirectX FP16 scRGB wide dynamic range and tone-maps to standard sRGB with zero lag, pure chromaticity preservation, and bit-for-bit SDR color fidelity.
-- **📋 Dual PNG & DIB Clipboard Support:** Images copy directly in `PNG`, `image/png`, `CF_DIB`, and `CF_BITMAP` formats for 100% compatibility with Discord, WhatsApp, Telegram, MS Word, Slack, Photoshop, and MS Paint.
+- **📋 Smart Timestamped Clipboard & Multi-Format Integration:** Automatically names clipboard images with unique timestamps (`resim_YYYYMMDD_HHMMSS.png`) via `CF_HDROP` and `FileGroupDescriptorW` to eliminate repeated generic file names (`resim.png` / `image.png`) across Discord, Telegram, and web browsers. Also provides `PNG`, `image/png`, `CF_DIB`, and `CF_BITMAP` for instant file pasting into desktop folders and full compatibility with Word, Photoshop, and Paint.
 - **🖐️ Move & 8-Point Resizing:** Drag selection using handles or move the entire selection with 🖐️ Move Tool, `Space + Drag`, or Middle Mouse Click.
 - **🎨 Rich Annotation Tools:**
   - ✏️ Freehand Pen
@@ -83,7 +83,7 @@ build.bat
 
 - **⚡ Sıfır Kırpışma (Zero-Flicker) Ekran Devri:** Seçim ekranından çizim ekranına geçerken 0ms kesintisiz görsel aktarım. Ekran asla kararmaz veya parlamaz.
 - **🖥️ Doğal HDR Desteği ve Akıllı Ton Haritalama:** HDR monitörlerde beyazların parlamasını ve patlamasını ("cırtlak" beyazlar) tamamen engelleyen gelişmiş DXGI FP16 scRGB ton haritalama desteği. SDR pencerelerde %100 birebir renk doğruluğu, HDR parlaklıklarında yumuşak eğri ve sıfır gecikmeli yakalama.
-- **📋 Gelişmiş PNG & DIB Pano Desteği:** Görseller doğrudan `PNG`, `image/png`, `CF_DIB` ve `CF_BITMAP` formatlarında panoya kopyalanır. Discord, WhatsApp, Telegram, Word, Slack, Photoshop ve Paint ile %100 uyumludur.
+- **📋 Zaman Damgalı Akıllı Pano ve Dosya Entegrasyonu:** Panoya kopyalanan görseller otomatik olarak benzersiz zaman damgasıyla (`resim_YYYYMMDD_HHMMSS.png`) `CF_HDROP` ve `FileGroupDescriptorW` ile adlandırılır. Discord, Telegram ve tarayıcılarda sürekli çıkan mükerrer "resim.png" sorununu tamamen engeller; masaüstüne/klasörlere doğrudan dosya olarak yapıştırmayı ve Photoshop, Paint, Word gibi uygulamalara zengin `PNG` / `CF_DIB` formatında aktarımı destekler.
 - **🖐️ Taşıma ve 8 Noktalı Boyutlandırma:** Seçim kutusunu Tutamaçlarından çekerek yeniden boyutlandırın veya 🖐️ Taşıma Aracı / `Space + Sürükle` / Orta Fare Tuşu ile ekranda serbestçe taşıyın.
 - **🎨 Zengin Çizim Araçları:** Kalem, Ok, İçi Boş/Dolu Dikdörtgen, Metin Ekleme, Mozayik (Sansür), Fosforlu Kalem, Silgi ve 12 Renkli Palet.
 - **🌐 Otomatik Türkçe & İngilizce Desteği:** Sistem dilini otomatik algılar veya Ayarlar menüsünden değiştirilebilir.

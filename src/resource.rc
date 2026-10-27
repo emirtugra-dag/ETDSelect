@@ -23,11 +23,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "Emir Tugra Dag"
             VALUE "FileDescription",  "ETDSelect Screenshot Tool"
-            VALUE "FileVersion",      "1.0.2.0"
+            VALUE "FileVersion",      "1.0.3.0"
             VALUE "LegalCopyright",   "Copyright (c) 2026 Emir Tugra Dag"
             VALUE "OriginalFilename", "ETDSelect.exe"
             VALUE "ProductName",      "ETDSelect"
-            VALUE "ProductVersion",   "1.0.2.0"
+            VALUE "ProductVersion",   "1.0.3.0"
         END
     END
     BLOCK "VarFileInfo"
